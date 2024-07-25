@@ -27,9 +27,10 @@ async function main() {
 // routes
 app.use("/api/user", userRoutes);
 app.use("/api/resume", resumeRoutes);
-app.use("/", (req, res) => {
+app.get("/", (req, res) => {
   res.send("Hello World");
 });
+
 app.listen(() => {
   console.log(`Server is started`);
 });
