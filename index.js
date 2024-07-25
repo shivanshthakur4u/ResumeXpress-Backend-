@@ -30,6 +30,6 @@ async function main() {
 app.use("/api/user", userRoutes);
 app.use("/api/resume", resumeRoutes)
 
-app.listen(process.env.PORT, () => {
-  console.log(`Server is running on port ${process.env.PORT}`);
+app.listen( () => {
+  console.log(`Server is started`);
 });
