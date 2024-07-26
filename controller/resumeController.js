@@ -35,12 +35,29 @@ export const createResume = async (req, res) => {
 export const getAllResume = async (req, res) => {
   try {
     const { email } = req.user;
-    const resumes = await Resume.find({ userEmail: email });
-    res.status(200).json({
-      success: true,
-      resumes: resumes,
-      message: "Resumes fetched successfully",
-    });
+    const {page, limit}=req.query;
+    if(page, limit){
+      const pageNumber = parseInt(page, 10);
+      const limitNumber =parseInt(limit, 10);
+      const skipNumber = (pageNumber - 1) * limitNumber;
+      const resumes = await Resume.find({ userEmail: email }).skip(skipNumber).limit(limitNumber);
+      const totalResumes = await Resume.countDocuments({ userEmail: email });
+      res.status(200).json({
+        success: true,
+        resumes: resumes,
+        totalPages: Math.ceil(totalResumes / limitNumber),
+        currentPage: pageNumber,
+        message: "Resumes fetched successfully",
+      });
+    }
+   else {
+      const resumes = await Resume.find({ userEmail: email }); 
+      res.status(200).json({
+        success: true,
+        resumes: resumes,
+        message: "Resumes fetched successfully",
+      });
+    }
   } catch (err) {
     console.error("Error getting all resumes:", err);
   }
