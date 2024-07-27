@@ -53,7 +53,7 @@ export const getAllResume = async (req, res) => {
         message: "Resumes fetched successfully",
       });
     } else {
-      const resumes = await Resume.find({ userEmail: email });
+      const resumes = await Resume.find({ userEmail: email }).sort({ createdAt: -1 });
       res.status(200).json({
         success: true,
         resumes: resumes,
