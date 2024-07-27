@@ -17,8 +17,8 @@ const EducationSchema = new mongoose.Schema({
   endDate: String,
   degree: String,
   major: String,
-  description: String,
   currentlyStudying: Boolean,
+  description: String,
 });
 
 const SkillSchema = new mongoose.Schema({

@@ -35,12 +35,15 @@ export const createResume = async (req, res) => {
 export const getAllResume = async (req, res) => {
   try {
     const { email } = req.user;
-    const {page, limit}=req.query;
-    if(page, limit){
+    const { page, limit } = req.query;
+    if ((page, limit)) {
       const pageNumber = parseInt(page, 10);
-      const limitNumber =parseInt(limit, 10);
+      const limitNumber = parseInt(limit, 10);
       const skipNumber = (pageNumber - 1) * limitNumber;
-      const resumes = await Resume.find({ userEmail: email }).skip(skipNumber).limit(limitNumber);
+      const resumes = await Resume.find({ userEmail: email })
+        .sort({ createdAt: -1 })
+        .skip(skipNumber)
+        .limit(limitNumber);
       const totalResumes = await Resume.countDocuments({ userEmail: email });
       res.status(200).json({
         success: true,
@@ -49,9 +52,8 @@ export const getAllResume = async (req, res) => {
         currentPage: pageNumber,
         message: "Resumes fetched successfully",
       });
-    }
-   else {
-      const resumes = await Resume.find({ userEmail: email }); 
+    } else {
+      const resumes = await Resume.find({ userEmail: email });
       res.status(200).json({
         success: true,
         resumes: resumes,
@@ -123,7 +125,6 @@ export const getResumeById = async (req, res) => {
   }
 };
 
-
 export const deleteResumeById = async (req, res) => {
   try {
     const { email } = req.user;
@@ -138,7 +139,7 @@ export const deleteResumeById = async (req, res) => {
     });
 
     if (!resume) {
-      console.log('Resume not found');
+      console.log("Resume not found");
       return res.status(404).json({
         success: false,
         message: "Invalid Resume Id",
@@ -150,11 +151,10 @@ export const deleteResumeById = async (req, res) => {
       message: "Resume deleted successfully",
     });
   } catch (err) {
-    console.error('Error deleting resume:', err);
+    console.error("Error deleting resume:", err);
     res.status(501).json({
       success: false,
       message: "Internal Server Error",
     });
   }
 };
-
