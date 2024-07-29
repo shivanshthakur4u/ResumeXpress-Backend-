@@ -7,7 +7,7 @@ export const createUser = async (req, res) => {
     const { name, email, password } = req.body;
     const user = await User.findOne({ email: email });
     if (user) {
-      res.status(400).json({
+     return res.status(400).json({
         success: false,
         message: "User already exists",
       });
@@ -24,7 +24,7 @@ export const createUser = async (req, res) => {
     const token = jwt.sign({ email: newUser.email }, process.env.JWT_SECRET, {
       expiresIn: "48h",
     });
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       message: "User registered successfully",
       data: {
@@ -59,7 +59,7 @@ export const userSignin = async (req, res) => {
     const token = jwt.sign({ email: isUser.email }, process.env.JWT_SECRET, {
       expiresIn: "48h",
     });
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: "User signed in successfully",
       data: {
