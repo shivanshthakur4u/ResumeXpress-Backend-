@@ -5,7 +5,7 @@ export const createResume = async (req, res) => {
   try {
     const { title } = req.body;
     const { email } = req.user;
-    const existingResume = await Resume.findOne({ title: title });
+    const existingResume = await Resume.findOne({ title: title, userEmail:email });
 
     if (existingResume) {
       return res
