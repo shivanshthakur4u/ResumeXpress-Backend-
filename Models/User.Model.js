@@ -15,6 +15,13 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  resetPasswordToken: {
+    type: String,
+
+  },
+  resetPasswordExpires: {
+    type:Date,
+  },
 
   resumes: [{ type: mongoose.Schema.Types.ObjectId, ref: "Resume" }],
 });
