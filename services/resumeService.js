@@ -57,7 +57,7 @@ export const listResumes = async ({ userEmail, page, limit, search, sort }) => {
   };
 };
 
-const findOwned = async (id, userEmail) => {
+export const findOwnedResume = async (id, userEmail) => {
   const resume = await Resume.findById(id);
   if (!resume) throw ApiError.notFound("Resume not found");
   // Ownership is checked separately from existence but reports the same error,
@@ -67,10 +67,10 @@ const findOwned = async (id, userEmail) => {
 };
 
 export const getOwnedResume = async ({ id, userEmail }) =>
-  stripInternal(await findOwned(id, userEmail));
+  stripInternal(await findOwnedResume(id, userEmail));
 
 export const updateResume = async ({ id, userEmail, data }) => {
-  const resume = await findOwned(id, userEmail);
+  const resume = await findOwnedResume(id, userEmail);
 
   // `data` has already been through the zod schema, so it contains only
   // writable resume fields — userEmail and _id cannot arrive here.
@@ -81,13 +81,13 @@ export const updateResume = async ({ id, userEmail, data }) => {
 };
 
 export const deleteResume = async ({ id, userEmail }) => {
-  const resume = await findOwned(id, userEmail);
+  const resume = await findOwnedResume(id, userEmail);
   await Resume.deleteOne({ _id: resume._id });
   await User.updateOne({ email: userEmail }, { $pull: { resumes: resume._id } });
 };
 
 export const setResumeVisibility = async ({ id, userEmail, isPublic }) => {
-  const resume = await findOwned(id, userEmail);
+  const resume = await findOwnedResume(id, userEmail);
   resume.isPublic = isPublic;
   await resume.save();
   return { _id: resume._id, isPublic: resume.isPublic };

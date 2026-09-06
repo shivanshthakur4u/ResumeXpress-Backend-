@@ -12,6 +12,7 @@ import { ApiError } from "./utils/ApiError.js";
 import userRoutes from "./routes/userRoutes.js";
 import resumeRoutes from "./routes/resumeRoutes.js";
 import aiRoutes from "./routes/aiRoutes.js";
+import careerProfileRoutes from "./routes/careerProfileRoutes.js";
 
 const app = express();
 
@@ -69,6 +70,7 @@ const mountRoutes = (prefix) => {
   app.use(`${prefix}/user`, userRoutes);
   app.use(`${prefix}/resume`, resumeRoutes);
   app.use(`${prefix}/ai`, aiRoutes);
+  app.use(`${prefix}/career-profile`, careerProfileRoutes);
 };
 
 // Versioned path for new clients; the unversioned path is kept so the existing

@@ -146,4 +146,133 @@ export const aiSchemas = {
   }),
 };
 
+const profileSkillItem = skillItem.extend({
+  category: z.string().max(100).optional(),
+});
+
+const projectItem = z.object({
+  name: z.string().max(200).optional(),
+  role: z.string().max(200).optional(),
+  description: z.string().max(5000).optional(),
+  url: z.string().max(500).optional(),
+  technologies: z.array(z.string().max(100)).max(50).optional(),
+  startDate: z.string().max(50).optional(),
+  endDate: z.string().max(50).optional(),
+});
+
+const certificationItem = z.object({
+  name: z.string().max(200).optional(),
+  issuer: z.string().max(200).optional(),
+  issueDate: z.string().max(50).optional(),
+  expiryDate: z.string().max(50).optional(),
+  credentialId: z.string().max(200).optional(),
+  url: z.string().max(500).optional(),
+});
+
+const achievementItem = z.object({
+  title: z.string().max(200).optional(),
+  description: z.string().max(5000).optional(),
+  date: z.string().max(50).optional(),
+});
+
+const awardItem = z.object({
+  title: z.string().max(200).optional(),
+  issuer: z.string().max(200).optional(),
+  date: z.string().max(50).optional(),
+  description: z.string().max(5000).optional(),
+});
+
+const publicationItem = z.object({
+  title: z.string().max(300).optional(),
+  publisher: z.string().max(200).optional(),
+  date: z.string().max(50).optional(),
+  url: z.string().max(500).optional(),
+  description: z.string().max(5000).optional(),
+});
+
+const volunteerItem = z.object({
+  organization: z.string().max(200).optional(),
+  role: z.string().max(200).optional(),
+  startDate: z.string().max(50).optional(),
+  endDate: z.string().max(50).optional(),
+  description: z.string().max(5000).optional(),
+});
+
+const languageItem = z.object({
+  name: z.string().max(100).optional(),
+  proficiency: z.string().max(50).optional(),
+});
+
+// As with resumes, every writable field is listed. `user` and `userEmail` are
+// absent, so a client cannot reassign a profile to another account.
+const careerProfileWritableFields = z.object({
+  firstName: z.string().max(100),
+  lastName: z.string().max(100),
+  jobTitle: z.string().max(200),
+  email: z.string().max(200),
+  phone: z.string().max(50),
+  address: z.string().max(300),
+  website: z.string().max(500),
+  linkedin: z.string().max(500),
+  github: z.string().max(500),
+  summary: z.string().max(20000),
+
+  experience: z.array(experienceItem).max(50),
+  education: z.array(educationItem).max(50),
+  skills: z.array(profileSkillItem).max(200),
+  projects: z.array(projectItem).max(50),
+  certifications: z.array(certificationItem).max(50),
+  achievements: z.array(achievementItem).max(50),
+  awards: z.array(awardItem).max(50),
+  publications: z.array(publicationItem).max(50),
+  volunteer: z.array(volunteerItem).max(50),
+  languages: z.array(languageItem).max(30),
+  interests: z.array(z.string().max(100)).max(50),
+
+  preferences: z.object({
+    targetRoles: z.array(z.string().max(200)).max(20).optional(),
+    targetIndustries: z.array(z.string().max(200)).max(20).optional(),
+    employmentTypes: z.array(z.string().max(50)).max(10).optional(),
+    locations: z.array(z.string().max(200)).max(20).optional(),
+    remotePreference: z.string().max(50).optional(),
+    salaryExpectation: z.string().max(100).optional(),
+    noticePeriod: z.string().max(100).optional(),
+  }),
+});
+
+// Only the sections a Resume can actually render today. Profile-only sections
+// such as projects and certifications are excluded until the resume editor
+// gains those sections, rather than silently discarding them on import.
+export const IMPORTABLE_SECTIONS = [
+  "personal",
+  "summary",
+  "experience",
+  "education",
+  "skills",
+];
+
+export const careerProfileSchemas = {
+  update: z.object({
+    body: careerProfileWritableFields
+      .partial()
+      .refine((data) => Object.keys(data).length > 0, {
+        message: "No valid fields provided to update",
+      }),
+  }),
+
+  importToResume: z.object({
+    params: z.object({ id: objectId }),
+    body: z.object({
+      sections: z
+        .array(z.enum(IMPORTABLE_SECTIONS))
+        .min(1, "Choose at least one section to import")
+        .default(IMPORTABLE_SECTIONS),
+    }),
+  }),
+
+  syncFromResume: z.object({
+    params: z.object({ id: objectId }),
+  }),
+};
+
 export { objectId };
