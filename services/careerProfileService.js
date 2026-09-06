@@ -1,7 +1,7 @@
 import { CareerProfile } from "../Models/CareerProfile.Model.js";
 import { User } from "../Models/User.Model.js";
 import { ApiError } from "../utils/ApiError.js";
-import { findOwnedResume } from "./resumeService.js";
+import { findOwnedResume, saveResumeContent } from "./resumeService.js";
 
 const stripInternal = (doc) => {
   const obj = doc.toObject ? doc.toObject() : { ...doc };
@@ -141,6 +141,7 @@ export const importProfileIntoResume = async ({
     findOwnedResume(resumeId, userEmail),
   ]);
 
+  const original = resume.toObject();
   const applied = [];
 
   if (sections.includes("personal")) {
@@ -195,7 +196,24 @@ export const importProfileIntoResume = async ({
     applied.push("skills");
   }
 
-  await resume.save();
+  const core = ["summary", "experience", "education", "skills"];
+  const defaults = core.map(type => ({ id: type, type, title: type[0].toUpperCase() + type.slice(1), hidden: false }));
+  let layout = resume.sections?.map(section => section.toObject()) ?? defaults;
+  let added = false;
+  for (const type of sections.filter(type => !["personal", ...core].includes(type))) {
+    const savedSections = profile.sections?.filter(section => section.type === type) ?? [];
+    const items = profile[type] ?? [];
+    const content = items.map(item => typeof item === "string" ? item : Object.entries(item.toObject ? item.toObject() : item).filter(([key, value]) => key !== "_id" && value !== undefined && value !== "" && (!Array.isArray(value) || value.length)).map(([key, value]) => `${key.replace(/([A-Z])/g, " $1")}: ${Array.isArray(value) ? value.join(", ") : value}`).join("\n")).join("\n\n");
+    if (savedSections.length || content) {
+      layout = layout.filter(section => section.type !== type);
+      layout.push(...(savedSections.length ? savedSections.map(section => section.toObject()) : [{ id: `profile-${type}`, type, title: type[0].toUpperCase() + type.slice(1), hidden: false, content }]));
+      applied.push(type); added = true;
+    }
+  }
+  if (added) resume.sections = layout;
+  const next = resume.toObject();
+  Object.assign(resume, original);
+  await saveResumeContent(resume, next, "profile");
 
   return { applied };
 };
@@ -237,6 +255,7 @@ export const syncProfileFromResume = async ({ resumeId, userEmail }) => {
     }
   }
 
+  if (resume.sections?.length) { profile.sections = resume.sections.map(section => section.toObject()); updated.push("sections"); }
   await profile.save();
 
   return {

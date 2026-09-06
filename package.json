@@ -4,9 +4,11 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "test": "node --test --test-concurrency=1 tests/",
+    "test": "node --test --test-concurrency=1 tests/*.test.js",
     "start": "node index.js",
-    "dev": "nodemon index.js"
+    "dev": "nodemon index.js",
+    "check": "node scripts/check.mjs",
+    "migrate": "node scripts/migrate.mjs"
   },
   "keywords": [],
   "author": "",
@@ -31,8 +33,13 @@
     "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.5.1",
-    "nodemailer": "^6.9.15",
+    "nodemailer": "^10.0.0",
+    "pdfkit": "^0.20.2",
+    "qrcode": "^1.5.4",
     "sanitize-html": "^2.17.5",
     "zod": "^4.5.4"
+  },
+  "engines": {
+    "node": ">=20 <26"
   }
 }

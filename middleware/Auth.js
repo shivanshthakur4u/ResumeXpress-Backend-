@@ -47,8 +47,8 @@ export const optionalAuth = async (req, res, next) => {
   if (!token) return next();
   try {
     const decoded = jwt.verify(token, env.JWT_SECRET);
-    const user = await User.findById(decoded.sub).select("_id name email");
-    if (user) {
+    const user = await User.findById(decoded.sub).select("_id name email passwordChangedAt");
+    if (user && (!user.passwordChangedAt || decoded.iat * 1000 >= user.passwordChangedAt.getTime())) {
       req.user = { id: user._id.toString(), email: user.email, name: user.name };
     }
   } catch {

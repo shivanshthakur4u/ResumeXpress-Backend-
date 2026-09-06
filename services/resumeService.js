@@ -1,3 +1,7 @@
+import { recordEvent } from "./analyticsService.js";
+import { ResumeVersion } from "../Models/ResumeVersion.Model.js";
+import { resumeWritableFields } from "../validation/schemas.js";
+import sanitizeHtml from "sanitize-html";
 import { Resume } from "../Models/Resume.Model.js";
 import { User } from "../Models/User.Model.js";
 import { ApiError } from "../utils/ApiError.js";
@@ -19,6 +23,7 @@ const INTERNAL_FIELDS = ["userEmail", "user", "__v"];
 const stripInternal = (doc) => {
   const obj = doc.toObject ? doc.toObject() : { ...doc };
   for (const f of INTERNAL_FIELDS) delete obj[f];
+  if (obj.experience) obj.experience = obj.experience.map(item => ({ ...item, workSummary: sanitizeHtml(item.workSummary ?? "", { allowedTags: ["p", "br", "ul", "ol", "li", "strong", "b", "i", "em", "u", "a"], allowedAttributes: { a: ["href"] }, allowedSchemes: ["https", "http", "mailto"] }) }));
   return obj;
 };
 
@@ -33,6 +38,7 @@ export const createResume = async ({ title, userEmail }) => {
 
   await User.updateOne({ _id: user._id }, { $push: { resumes: resume._id } });
 
+  await recordEvent(userEmail, "resume_created", resume._id);
   return { title: resume.title, _id: resume._id };
 };
 
@@ -74,8 +80,7 @@ export const updateResume = async ({ id, userEmail, data }) => {
 
   // `data` has already been through the zod schema, so it contains only
   // writable resume fields — userEmail and _id cannot arrive here.
-  Object.assign(resume, data);
-  await resume.save();
+  await saveResumeContent(resume, data);
 
   return stripInternal(resume);
 };
@@ -83,6 +88,7 @@ export const updateResume = async ({ id, userEmail, data }) => {
 export const deleteResume = async ({ id, userEmail }) => {
   const resume = await findOwnedResume(id, userEmail);
   await Resume.deleteOne({ _id: resume._id });
+  await ResumeVersion.deleteMany({ resume: resume._id, userEmail });
   await User.updateOne({ email: userEmail }, { $pull: { resumes: resume._id } });
 };
 
@@ -107,5 +113,67 @@ export const getViewableResume = async ({ id, requesterEmail }) => {
   const { _id, title, ...rest } = stripInternal(resume);
   // isOwner lets the client decide whether to offer the sharing controls
   // without having to expose who the owner actually is.
-  return { ...rest, isOwner };
+  if (!isOwner) {
+    delete rest.publicViews;
+    delete rest.targetRole; delete rest.targetIndustry; delete rest.status;
+    if (rest.sections) {
+      rest.sections = rest.sections.filter(section => !section.hidden);
+      for (const type of ["summary", "experience", "education", "skills"]) {
+        if (!rest.sections.some(section => section.type === type && section.content === undefined)) rest[type] = type === "summary" ? "" : [];
+      }
+    }
+  }
+  return { ...rest, ...(isOwner ? { _id, title } : {}), isOwner };
+};
+
+// Save the previous state before mutation; an interrupted save cannot lose it.
+export const saveResumeContent = async (resume, data, source = "manual") => {
+  const clean = resumeWritableFields.partial().parse(data);
+  if (clean.experience) clean.experience = clean.experience.map(item => ({
+    ...item, workSummary: sanitizeHtml(item.workSummary ?? "", {
+      allowedTags: ["p", "br", "ul", "ol", "li", "strong", "b", "i", "em", "u", "a"],
+      allowedAttributes: { a: ["href"] }, allowedSchemes: ["https", "http", "mailto"],
+    }),
+  }));
+  const snapshot = resumeWritableFields.partial().parse(resume.toObject());
+  await ResumeVersion.updateOne({ resume: resume._id, revision: resume.__v ?? 0 }, {
+    $setOnInsert: { userEmail: resume.userEmail, snapshot, source, },
+  }, { upsert: true });
+  Object.assign(resume, clean);
+  resume.increment();
+  await resume.save();
+  await recordEvent(resume.userEmail, data.status === "ready" ? "resume_completed" : "resume_updated", resume._id);
+  return stripInternal(resume);
+};
+
+export const listVersions = async ({ id, userEmail, page = 1 }) => {
+  await findOwnedResume(id, userEmail);
+  const filter = { resume: id, userEmail };
+  const [versions, total] = await Promise.all([
+    ResumeVersion.find(filter).sort({ revision: -1 }).skip((page - 1) * 20).limit(20)
+      .select("revision source createdAt").lean(),
+    ResumeVersion.countDocuments(filter),
+  ]);
+  return { versions, total, page };
+};
+
+export const getVersion = async ({ id, versionId, userEmail }) => {
+  await findOwnedResume(id, userEmail);
+  const version = await ResumeVersion.findOne({ _id: versionId, resume: id, userEmail }).lean();
+  if (!version) throw ApiError.notFound("Version not found");
+  return { _id: version._id, revision: version.revision, source: version.source, createdAt: version.createdAt, snapshot: version.snapshot };
+};
+
+export const restoreVersion = async (args) => {
+  const version = await getVersion(args);
+  const resume = await findOwnedResume(args.id, args.userEmail);
+  return saveResumeContent(resume, Object.fromEntries(Object.keys(resumeWritableFields.shape).map(key => [key, version.snapshot[key]])), "restore");
+};
+
+export const duplicateResume = async ({ id, userEmail }) => {
+  const original = await findOwnedResume(id, userEmail);
+  const title = `${original.title.slice(0, 65)} (copy ${Date.now()})`;
+  const created = await createResume({ title, userEmail });
+  const copy = await findOwnedResume(created._id, userEmail);
+  return saveResumeContent(copy, { ...resumeWritableFields.partial().parse(original.toObject()), title });
 };

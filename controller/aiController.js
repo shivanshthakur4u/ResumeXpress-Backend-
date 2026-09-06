@@ -4,6 +4,7 @@ import * as aiService from "../services/aiService.js";
 export const generateSummaries = asyncHandler(async (req, res) => {
   const summaries = await aiService.generateSummaries({
     jobTitle: req.body.jobTitle,
+    facts: req.body.facts,
   });
 
   res.status(200).json({
@@ -16,6 +17,7 @@ export const generateSummaries = asyncHandler(async (req, res) => {
 export const generateExperienceBullets = asyncHandler(async (req, res) => {
   const content = await aiService.generateExperienceBullets({
     positionTitle: req.body.positionTitle,
+    facts: req.body.facts,
   });
 
   res.status(200).json({

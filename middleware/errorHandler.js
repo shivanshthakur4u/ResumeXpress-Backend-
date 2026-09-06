@@ -30,6 +30,8 @@ const normalize = (err) => {
     );
   }
 
+  if (err instanceof mongoose.Error.VersionError) return ApiError.conflict("This resume changed elsewhere. Reload before saving again.");
+
   if (err instanceof mongoose.Error.CastError) {
     return ApiError.badRequest(`Invalid value for '${err.path}'`);
   }
@@ -59,7 +61,7 @@ export const errorHandler = (err, req, res, next) => {
   if (isUnexpected || apiError.statusCode >= 500) {
     console.error(
       `[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`,
-      err
+      { name: err?.name, status: apiError.statusCode }
     );
   }
 
@@ -67,7 +69,6 @@ export const errorHandler = (err, req, res, next) => {
     success: false,
     message: apiError.message,
     ...(apiError.details ? { errors: apiError.details } : {}),
-    // Stack traces are a disclosure risk, so they are development-only.
-    ...(env.isProduction ? {} : { stack: err?.stack }),
+
   });
 };

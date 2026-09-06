@@ -8,13 +8,11 @@ const client = env.aiEnabled
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
-const withTimeout = (promise, ms) =>
-  Promise.race([
-    promise,
-    new Promise((_, reject) =>
-      setTimeout(() => reject(ApiError.serviceUnavailable("AI request timed out")), ms)
-    ),
-  ]);
+const withTimeout = async (promise, ms) => {
+  let timer;
+  try { return await Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(ApiError.serviceUnavailable("AI request timed out")), ms); })]); }
+  finally { clearTimeout(timer); }
+};
 
 const getModel = ({ json, systemInstruction }) => {
   if (!client) {
@@ -26,7 +24,7 @@ const getModel = ({ json, systemInstruction }) => {
     model: env.AI_MODEL,
     systemInstruction,
     generationConfig: {
-      temperature: 0.9,
+      temperature: 0.2,
       topP: 0.95,
       maxOutputTokens: 4096,
       ...(json ? { responseMimeType: "application/json" } : {}),
@@ -78,7 +76,7 @@ export const generateStructured = async ({
     }
   }
 
-  console.error("AI structured output failed validation:", lastError);
+  console.error("AI structured output failed validation", { name: lastError?.name });
   throw ApiError.serviceUnavailable(
     "The AI returned an unexpected response. Please try again."
   );

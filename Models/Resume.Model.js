@@ -36,6 +36,17 @@ const ResumeSchema = new mongoose.Schema(
     email: { type: String, default: "" },
     themeColor: { type: String, default: "" },
     summary: { type: String, default: "" },
+    template: { type: String, default: "legacy" },
+    paperSize: { type: String, default: "A4" },
+    typography: { type: String, default: "sans" },
+    fontSize: { type: Number, default: 11 },
+    spacing: { type: Number, default: 1.4 },
+    targetRole: String,
+    targetIndustry: String,
+    status: { type: String, default: "draft" },
+    sections: { type: [new mongoose.Schema({
+      id: String, type: String, title: String, hidden: Boolean, content: String,
+    }, { _id: false })], default: undefined },
     experience: [ExperienceSchema],
     education: [EducationSchema],
     skills: [SkillSchema],
@@ -50,8 +61,10 @@ const ResumeSchema = new mongoose.Schema(
     // Sharing is opt-in. Without this a resume id was enough for anyone to
     // read the owner's phone, address and work history.
     isPublic: { type: Boolean, default: false, index: true },
+    publicSlug: { type: String, unique: true, sparse: true, index: true },
+    publicViews: { type: Number, default: 0 },
   },
-  { timestamps: true }
+  { timestamps: true, optimisticConcurrency: true }
 );
 
 // Serves the dashboard list query (owner's resumes, newest first). createdAt

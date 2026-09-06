@@ -229,7 +229,7 @@ describe("importing a profile into a resume", () => {
     const res = await request
       .post(`/api/v1/career-profile/import-to-resume/${resumeId}`)
       .set("Authorization", `Bearer ${token}`)
-      .send({ sections: ["projects"] });
+      .send({ sections: ["unknown-section"] });
 
     assert.equal(res.status, 400);
   });

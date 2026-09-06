@@ -1,3 +1,4 @@
+import { recordEvent } from "./analyticsService.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import crypto from "node:crypto";
@@ -35,6 +36,7 @@ export const register = async ({ name, email, password }) => {
     password: await bcrypt.hash(password, BCRYPT_ROUNDS),
   });
 
+  await recordEvent(user.email, "signup", user._id);
   return toAuthPayload(user);
 };
 

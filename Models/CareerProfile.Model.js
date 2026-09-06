@@ -106,6 +106,7 @@ const CareerProfileSchema = new mongoose.Schema(
     github: { type: String, default: "" },
 
     summary: { type: String, default: "" },
+    sections: { type: [new mongoose.Schema({ id: String, type: String, title: String, hidden: Boolean, content: String }, { _id: false })], default: undefined },
 
     experience: [ExperienceSchema],
     education: [EducationSchema],

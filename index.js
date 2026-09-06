@@ -9,6 +9,7 @@ import { generalLimiter } from "./middleware/rateLimit.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 import { ApiError } from "./utils/ApiError.js";
 
+import careerWorkspaceRoutes from "./routes/careerWorkspaceRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 import resumeRoutes from "./routes/resumeRoutes.js";
 import aiRoutes from "./routes/aiRoutes.js";
@@ -42,6 +43,12 @@ app.use(express.json({ limit: "1mb" }));
 app.use(mongoSanitize());
 
 app.use(generalLimiter);
+// Temporary diagnostics requested by the repository workflow. Contains no resume data or tokens.
+if (process.env.DEBUG_RESUMEXPRESS === "1") app.use((req, res, next) => {
+  const started = Date.now();
+  res.on("finish", () => console.info("[DEBUG-RESUMEXPRESS]", { method: req.method, status: res.statusCode, durationMs: Date.now() - started }));
+  next();
+});
 
 // Deliberately mounted before the database gate: a liveness probe that fails
 // when Mongo is down cannot tell you the process is up.
@@ -67,6 +74,7 @@ app.use("/api", async (req, res, next) => {
 });
 
 const mountRoutes = (prefix) => {
+  app.use(`${prefix}/career`, careerWorkspaceRoutes);
   app.use(`${prefix}/user`, userRoutes);
   app.use(`${prefix}/resume`, resumeRoutes);
   app.use(`${prefix}/ai`, aiRoutes);

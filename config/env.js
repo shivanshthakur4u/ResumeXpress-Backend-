@@ -28,10 +28,12 @@ const envSchema = z.object({
   SMTP_PORT: z.coerce.number().int().positive().default(587),
 
   GOOGLE_AI_API_KEY: z.string().optional(),
-  AI_MODEL: z.string().default("gemini-1.5-flash"),
+  AI_MODEL: z.string().default("gemini-2.5-flash"),
 });
 
-const parsed = envSchema.safeParse(process.env);
+const environment = { ...process.env };
+for (const key of ["EMAIL_USER", "EMAIL_APP_PASSWORD", "GOOGLE_AI_API_KEY", "CORS_ORIGINS"]) if (!environment[key]?.trim()) delete environment[key];
+const parsed = envSchema.safeParse(environment);
 
 if (!parsed.success) {
   const issues = parsed.error.issues

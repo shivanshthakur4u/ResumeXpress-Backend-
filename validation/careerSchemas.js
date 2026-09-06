@@ -1,0 +1,23 @@
+import { z } from "zod";
+import { objectId } from "./schemas.js";
+const text = z.string().trim().max(200);
+const url = z.union([z.literal(""), z.url().refine(value => /^https?:\/\//i.test(value), "Use an http or https URL")]);
+export const statuses = ["Saved", "Applied", "Screening", "Interview", "Technical Interview", "Final Interview", "Offer", "Rejected", "Withdrawn"];
+export const jobInput = z.object({ title: text.min(1), company: text.default(""), description: z.string().trim().min(80).max(30000), url: url.default("") });
+export const applicationInput = z.object({ company: text.min(1), position: text.min(1), url: url.default(""), resume: objectId.optional(), coverLetter: objectId.optional(), dateApplied: z.string().max(30).default(""), status: z.enum(statuses).default("Saved"), notes: z.string().max(10000).default(""), interviewDates: z.array(z.string().max(50)).max(30).default([]) });
+export const contextInput = z.object({ resumeId: objectId, jobId: objectId.optional(), targetRole: text.optional(), style: z.enum(["professional", "technical", "executive", "concise", "achievement-focused", "standard"]).default("professional"), message: z.string().trim().max(5000).optional() });
+export const listInput = z.object({ query: z.object({ page: z.coerce.number().int().min(1).default(1), search: z.string().max(100).default(""), kind: z.enum(["ats", "match", "optimizer", "bullets", "summary", "skills", "linkedin", "gap", "coach", "job", "cover-letter", "interview", "interview-feedback"]).optional(), status: z.enum(statuses).optional(), sort: z.enum(["newest", "oldest", "updated", "status"]).default("newest") }) });
+export const jobOutput = z.object({ title: text, seniority: text, requiredSkills: z.array(text).max(80), preferredSkills: z.array(text).max(80), responsibilities: z.array(z.string().max(1000)).max(40), qualifications: z.array(z.string().max(1000)).max(40), keywords: z.array(text).max(100), tools: z.array(text).max(60), technologies: z.array(text).max(60), softSkills: z.array(text).max(40), industry: text, likelyPriorities: z.array(z.string().max(1000)).max(20) });
+export const suggestionOutput = z.object({ suggestions: z.array(z.object({ field: z.enum(["summary", "workSummary"]), index: z.number().int().min(0).max(49).optional(), current: z.string().max(20000), suggested: z.string().max(20000), reason: z.string().max(2000), confidence: z.number().min(0).max(1), evidence: z.array(z.string().max(2000)).max(20) })).max(15), questions: z.array(z.string().max(1000)).max(15) });
+export const letterOutput = z.object({ content: z.string().min(1).max(15000), missingInformation: z.array(z.string().max(1000)).max(20) });
+export const coachOutput = z.object({ response: z.string().min(1).max(12000), questions: z.array(z.string().max(1000)).max(15) });
+export const skillsOutput = z.object({ existing: z.array(text).max(100), missing: z.array(text).max(100), related: z.array(text).max(100), emphasize: z.array(text).max(100), repeated: z.array(text).max(100), explanation: z.string().max(5000) });
+export const linkedinOutput = z.object({ headline: z.string().max(220), about: z.string().max(2600), experience: z.array(z.string().max(3000)).max(50), skills: z.array(text).max(100), recommendations: z.array(z.string().max(1000)).max(20) });
+export const gapOutput = z.object({ strengths: z.array(text).max(30), gaps: z.array(z.string().max(1000)).max(30), plan: z.array(z.object({ days: z.union([z.literal(30), z.literal(60), z.literal(90)]), actions: z.array(z.string().max(1000)).min(1).max(15) })).length(3) });
+export const questionsOutput = z.object({ questions: z.array(z.string().min(10).max(1500)).min(3).max(10) });
+export const evaluationOutput = z.object({ relevance: z.number().min(0).max(100), clarity: z.number().min(0).max(100), structure: z.number().min(0).max(100), technicalAccuracy: z.number().min(0).max(100).nullable(), feedback: z.string().max(5000), missingPoints: z.array(z.string().max(1000)).max(15), improvedStructure: z.string().max(3000) });
+export const matchOutput = z.object({
+  overallMatch: z.number().min(0).max(100).nullable(), skillMatch: z.number().min(0).max(100).nullable(), keywordMatch: z.number().min(0).max(100).nullable(), experienceMatch: z.number().min(0).max(100).nullable(), seniorityMatch: z.number().min(0).max(100).nullable(), responsibilityMatch: z.number().min(0).max(100).nullable(),
+  assessments: z.array(z.object({ requirement: z.string().max(1000), status: z.enum(["MATCHED", "PARTIAL", "MISSING"]), evidence: z.array(z.string().max(1000)).max(10), reason: z.string().max(2000) })).max(40),
+  missingInformation: z.array(z.string().max(1000)).max(20), explanations: z.record(z.string(), z.string().max(2000)),
+});

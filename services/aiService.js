@@ -1,3 +1,4 @@
+import { ApiError } from "../utils/ApiError.js";
 import { z } from "zod";
 import sanitizeHtml from "sanitize-html";
 import { generateText, generateStructured } from "./ai/geminiProvider.js";
@@ -31,14 +32,14 @@ const summariesSchema = z.union([
     .transform((o) => Object.values(o)[0] ?? []),
 ]);
 
-export const generateSummaries = async ({ jobTitle }) => {
+export const generateSummaries = async ({ jobTitle, facts }) => {
+  if (!facts?.trim()) throw ApiError.badRequest("Provide your actual experience and skills in the Summary Writer before generating.");
   const summaries = await generateStructured({
     systemInstruction: TRUTHFULNESS_RULE,
     schema: summariesSchema,
-    prompt: `Job title: "${jobTitle}".
+    prompt: `Candidate facts: ${facts}\nJob title: "${jobTitle}".
 
-Write 3 professional resume summaries for this job title, one for each
-experience level: Fresher, Mid Level, and Senior. Each summary is 3-4 lines.
+Write 3 professional resume summaries for this job title, based only on the candidate facts. Do not imply an experience level that was not provided. Each summary is 3-4 lines.
 
 Do not include specific metrics, employer names, or years of experience that
 were not given to you.
@@ -71,13 +72,13 @@ const toBulletHtml = (text) => {
   return `<ul>${items}</ul>`;
 };
 
-export const generateExperienceBullets = async ({ positionTitle }) => {
+export const generateExperienceBullets = async ({ positionTitle, facts }) => {
+  if (!facts?.trim()) throw ApiError.badRequest("Describe what you built, the tools used and the outcome in the Bullet Writer first.");
   const raw = await generateText({
     systemInstruction: TRUTHFULNESS_RULE,
-    prompt: `Position title: "${positionTitle}".
+    prompt: `Candidate facts: ${facts}\nPosition title: "${positionTitle}".
 
-Write 5-7 resume bullet points describing typical responsibilities and
-contributions for this position. Focus on scope and capability rather than
+Write 5-7 resume bullet points describing only the candidate facts supplied. Ask for missing details instead of inventing responsibilities. Focus on scope and capability rather than
 invented numbers.
 
 Return HTML only: a single <ul> containing <li> elements. No commentary,

@@ -76,7 +76,7 @@ const skillItem = z.object({
 // Every writable resume field is listed explicitly. Anything absent here —
 // notably `userEmail` and `_id` — is stripped by zod before it reaches the
 // document, which is what stops a client reassigning a resume to another user.
-const resumeWritableFields = z.object({
+export const resumeWritableFields = z.object({
   title: z.string().trim().min(1).max(100),
   firstName: z.string().max(100),
   lastName: z.string().max(100),
@@ -89,6 +89,21 @@ const resumeWritableFields = z.object({
   experience: z.array(experienceItem).max(50),
   education: z.array(educationItem).max(50),
   skills: z.array(skillItem).max(100),
+  template: z.enum(["legacy", "ats-minimal", "professional", "modern", "executive", "technical", "academic"]),
+  paperSize: z.enum(["A4", "Letter"]),
+  typography: z.enum(["sans", "serif", "mono"]),
+  fontSize: z.number().min(9).max(14),
+  spacing: z.number().min(1).max(1.8),
+  targetRole: z.string().max(200),
+  targetIndustry: z.string().max(200),
+  status: z.enum(["draft", "ready", "archived"]),
+  sections: z.array(z.object({
+    id: z.string().min(1).max(100),
+    type: z.enum(["summary", "experience", "education", "skills", "projects", "certifications", "awards", "publications", "volunteer", "languages", "interests", "leadership", "coursework", "research", "achievements"]),
+    title: z.string().trim().min(1).max(100),
+    hidden: z.boolean().default(false),
+    content: z.string().max(20000).optional(),
+  })).max(40).refine(items => new Set(items.map(item => item.id)).size === items.length, "Section ids must be unique"),
 });
 
 export const resumeSchemas = {
@@ -132,11 +147,13 @@ export const aiSchemas = {
   summaries: z.object({
     body: z.object({
       jobTitle: z.string().trim().min(1, "Job title is required").max(200),
+      facts: z.string().trim().min(20).max(10000),
     }),
   }),
 
   experienceBullets: z.object({
     body: z.object({
+      facts: z.string().trim().min(20).max(10000),
       positionTitle: z
         .string()
         .trim()
@@ -206,6 +223,7 @@ const languageItem = z.object({
 // As with resumes, every writable field is listed. `user` and `userEmail` are
 // absent, so a client cannot reassign a profile to another account.
 const careerProfileWritableFields = z.object({
+  sections: resumeWritableFields.shape.sections,
   firstName: z.string().max(100),
   lastName: z.string().max(100),
   jobTitle: z.string().max(200),
@@ -248,7 +266,7 @@ export const IMPORTABLE_SECTIONS = [
   "summary",
   "experience",
   "education",
-  "skills",
+  "skills", "projects", "certifications", "awards", "publications", "volunteer", "languages", "interests", "leadership", "coursework", "research", "achievements",
 ];
 
 export const careerProfileSchemas = {
