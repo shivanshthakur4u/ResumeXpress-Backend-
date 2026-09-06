@@ -251,6 +251,14 @@ describe("public sharing is opt-in", () => {
     // Even when public, internal ownership fields are not exposed.
     assert.equal(afterPublish.body.resume.userEmail, undefined);
     assert.equal(afterPublish.body.resume.user, undefined);
+
+    // An anonymous viewer is never told they own it; the owner is.
+    assert.equal(afterPublish.body.resume.isOwner, false);
+
+    const ownerView = await request
+      .get(`/api/v1/resume/getResumeById/${id}`)
+      .set("Authorization", `Bearer ${token}`);
+    assert.equal(ownerView.body.resume.isOwner, true);
   });
 
   test("only the owner can change visibility", async () => {

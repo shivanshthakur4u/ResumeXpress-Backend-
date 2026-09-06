@@ -99,11 +99,13 @@ export const getViewableResume = async ({ id, requesterEmail }) => {
   const resume = await Resume.findById(id);
   if (!resume) throw ApiError.notFound("Resume not found");
 
-  const isOwner = requesterEmail && resume.userEmail === requesterEmail;
+  const isOwner = Boolean(requesterEmail && resume.userEmail === requesterEmail);
   if (!isOwner && !resume.isPublic) {
     throw ApiError.notFound("Resume not found");
   }
 
   const { _id, title, ...rest } = stripInternal(resume);
-  return rest;
+  // isOwner lets the client decide whether to offer the sharing controls
+  // without having to expose who the owner actually is.
+  return { ...rest, isOwner };
 };
