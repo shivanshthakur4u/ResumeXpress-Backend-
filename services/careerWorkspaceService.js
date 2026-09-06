@@ -126,6 +126,7 @@ export const generate = async (userEmail, kind, input) => {
   const config = tools[kind];
   if (!config) throw ApiError.badRequest("Unknown career tool");
   const { data, resume, job } = await (kind === "coach" ? coachContext(userEmail, input) : contextFor(userEmail, input));
+  if (kind === "match" && !job) throw ApiError.badRequest("Choose a target job to compare with this resume");
   const result = await ai({ userEmail, kind, context: data, schema: config[0], instruction: config[1], resume: resume._id, job: job?._id });
   if (kind === "coach") await CoachMessage.insertMany([{ userEmail, resume: resume._id, role: "user", content: input.message ?? "Review my career profile" }, { userEmail, resume: resume._id, role: "assistant", content: result.output.response }]);
   return publicFields(result);
@@ -163,9 +164,8 @@ export const applyResumeDraft = async (userEmail, id, fields, edited = {}) => {
 };
 export const createLetter = async (userEmail, input) => {
   const { data, resume, job } = await contextFor(userEmail, input);
-  if (!job) throw ApiError.badRequest("Choose a job for this cover letter");
-  const result = await ai({ userEmail, kind: "cover-letter", context: data, schema: schemas.letterOutput, resume: resume._id, job: job._id, instruction: 'Return {content:string,missingInformation:string[]}. Write a personalized cover letter in the requested style using only supplied candidate and company facts.' });
-  const letter = await CoverLetter.create({ userEmail, resume: resume._id, job: job._id, title: `${job.title} - ${job.company}`, style: input.style, content: result.output.content });
+  const result = await ai({ userEmail, kind: "cover-letter", context: data, schema: schemas.letterOutput, resume: resume._id, job: job?._id, instruction: 'Return {content:string,missingInformation:string[]}. Write a cover letter in the requested style using only supplied candidate facts. When a job is supplied, tailor it to its requirements and confirmed company facts. Without a job, write a general letter for the supplied target role or candidate background; do not invent an employer, vacancy, company claims, addresses or recipient names. Report missing information separately.' });
+  const letter = await CoverLetter.create({ userEmail, resume: resume._id, job: job?._id, title: job ? [job.title, job.company].filter(Boolean).join(" - ") : `${input.targetRole || resume.targetRole || resume.jobTitle || "General"} cover letter`, style: input.style, content: result.output.content });
   await recordEvent(userEmail, "cover_letter_generated", letter._id);
   return { ...publicFields(letter), missingInformation: result.output.missingInformation };
 };
@@ -207,7 +207,7 @@ export const list = async (model, userEmail, { page = 1, search = "", status, ki
 export const overview = async userEmail => {
   const [resumes, jobs, applications, analyses, letters, interviews, activity, recentResumes] = await Promise.all([
     Resume.countDocuments({ userEmail }), Job.countDocuments({ userEmail }), Application.countDocuments({ userEmail }), AIAnalysis.countDocuments({ userEmail, kind: "ats" }), CoverLetter.countDocuments({ userEmail }), InterviewSession.countDocuments({ userEmail }),
-    AnalyticsEvent.find({ userEmail }).sort({ createdAt: -1 }).limit(10).select("event createdAt").lean(),
+    AnalyticsEvent.find({ userEmail }).sort({ createdAt: -1 }).limit(10).select("event resource createdAt").lean(),
     Resume.find({ userEmail }).sort({ updatedAt: -1 }).limit(6).lean(),
   ]);
   const reviews = await AIAnalysis.aggregate([
