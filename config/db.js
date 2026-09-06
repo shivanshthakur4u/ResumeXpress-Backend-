@@ -8,7 +8,10 @@ let connectionPromise = null;
 export const connectDB = () => {
   if (!connectionPromise) {
     connectionPromise = mongoose
-      .connect(env.DB_URI, { serverSelectionTimeoutMS: 10_000 })
+      .connect(env.DB_URI, {
+        serverSelectionTimeoutMS: 5_000,
+        connectTimeoutMS: 5_000,
+      })
       .then((conn) => {
         console.log("Connected to MongoDB");
         return conn;
