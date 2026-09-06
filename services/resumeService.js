@@ -4,6 +4,7 @@ import { resumeWritableFields } from "../validation/schemas.js";
 import sanitizeHtml from "sanitize-html";
 import { Resume } from "../Models/Resume.Model.js";
 import { User } from "../Models/User.Model.js";
+import { Job, AIAnalysis } from "../Models/CareerWorkspace.Model.js";
 import { ApiError } from "../utils/ApiError.js";
 
 const SORT_OPTIONS = {
@@ -11,6 +12,7 @@ const SORT_OPTIONS = {
   oldest: { createdAt: 1 },
   title: { title: 1 },
   updated: { updatedAt: -1 },
+  status: { status: 1, updatedAt: -1 },
 };
 
 // User input reaches a $regex, so metacharacters are escaped to keep it a
@@ -47,7 +49,17 @@ export const listResumes = async ({ userEmail, page, limit, search, sort }) => {
   if (search) filter.title = { $regex: escapeRegex(search), $options: "i" };
 
   const [resumes, total] = await Promise.all([
-    Resume.find(filter)
+    sort === "score" ? Resume.aggregate([
+      { $match: filter },
+      { $lookup: { from: AIAnalysis.collection.name, let: { resumeId: "$_id" }, pipeline: [
+        { $match: { userEmail, kind: "ats", $expr: { $eq: ["$resume", "$$resumeId"] } } },
+        { $sort: { createdAt: -1, _id: -1 } }, { $limit: 1 },
+        { $project: { score: "$output.overallScore", createdAt: 1 } },
+      ], as: "lastAts" } },
+      { $set: { latestAtsScore: { $ifNull: [{ $first: "$lastAts.score" }, null] }, atsStale: { $gt: ["$updatedAt", { $first: "$lastAts.createdAt" }] } } },
+      { $sort: { latestAtsScore: -1, updatedAt: -1, _id: -1 } },
+      { $skip: (page - 1) * limit }, { $limit: limit }, { $project: { lastAts: 0 } },
+    ]) : Resume.find(filter)
       .sort(SORT_OPTIONS[sort] ?? SORT_OPTIONS.newest)
       .skip((page - 1) * limit)
       .limit(limit)
@@ -115,7 +127,7 @@ export const getViewableResume = async ({ id, requesterEmail }) => {
   // without having to expose who the owner actually is.
   if (!isOwner) {
     delete rest.publicViews;
-    delete rest.targetRole; delete rest.targetIndustry; delete rest.status;
+    delete rest.targetRole; delete rest.targetIndustry; delete rest.targetJob; delete rest.status;
     if (rest.sections) {
       rest.sections = rest.sections.filter(section => !section.hidden);
       for (const type of ["summary", "experience", "education", "skills"]) {
@@ -129,6 +141,7 @@ export const getViewableResume = async ({ id, requesterEmail }) => {
 // Save the previous state before mutation; an interrupted save cannot lose it.
 export const saveResumeContent = async (resume, data, source = "manual") => {
   const clean = resumeWritableFields.partial().parse(data);
+  if (clean.targetJob && !await Job.exists({ _id: clean.targetJob, userEmail: resume.userEmail })) throw ApiError.notFound("Target job not found. Select an owned job or clear the target.");
   if (clean.experience) clean.experience = clean.experience.map(item => ({
     ...item, workSummary: sanitizeHtml(item.workSummary ?? "", {
       allowedTags: ["p", "br", "ul", "ol", "li", "strong", "b", "i", "em", "u", "a"],

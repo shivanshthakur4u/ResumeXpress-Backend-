@@ -28,7 +28,7 @@ const envSchema = z.object({
   SMTP_PORT: z.coerce.number().int().positive().default(587),
 
   GOOGLE_AI_API_KEY: z.string().optional(),
-  AI_MODEL: z.string().default("gemini-2.5-flash"),
+  AI_MODEL: z.string().default("gemini-3.6-flash"),
 });
 
 const environment = { ...process.env };

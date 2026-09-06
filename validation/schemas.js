@@ -73,100 +73,6 @@ const skillItem = z.object({
   rating: z.number().min(0).max(5).optional(),
 });
 
-// Every writable resume field is listed explicitly. Anything absent here —
-// notably `userEmail` and `_id` — is stripped by zod before it reaches the
-// document, which is what stops a client reassigning a resume to another user.
-export const resumeWritableFields = z.object({
-  title: z.string().trim().min(1).max(100),
-  firstName: z.string().max(100),
-  lastName: z.string().max(100),
-  jobTitle: z.string().max(200),
-  address: z.string().max(300),
-  phone: z.string().max(50),
-  email: z.string().max(200),
-  themeColor: z.string().max(50),
-  summary: z.string().max(20000),
-  experience: z.array(experienceItem).max(50),
-  education: z.array(educationItem).max(50),
-  skills: z.array(skillItem).max(100),
-  template: z.enum(["legacy", "ats-minimal", "professional", "modern", "executive", "technical", "academic"]),
-  paperSize: z.enum(["A4", "Letter"]),
-  typography: z.enum(["sans", "serif", "mono"]),
-  fontSize: z.number().min(9).max(14),
-  spacing: z.number().min(1).max(1.8),
-  targetRole: z.string().max(200),
-  targetIndustry: z.string().max(200),
-  status: z.enum(["draft", "ready", "archived"]),
-  sections: z.array(z.object({
-    id: z.string().min(1).max(100),
-    type: z.enum(["summary", "experience", "education", "skills", "projects", "certifications", "awards", "publications", "volunteer", "languages", "interests", "leadership", "coursework", "research", "achievements"]),
-    title: z.string().trim().min(1).max(100),
-    hidden: z.boolean().default(false),
-    content: z.string().max(20000).optional(),
-  })).max(40).refine(items => new Set(items.map(item => item.id)).size === items.length, "Section ids must be unique"),
-});
-
-export const resumeSchemas = {
-  create: z.object({
-    body: z.object({
-      title: z.string().trim().min(1, "Title is required").max(100),
-    }),
-  }),
-
-  update: z.object({
-    params: z.object({ id: objectId }),
-    body: resumeWritableFields
-      .partial()
-      .refine((data) => Object.keys(data).length > 0, {
-        message: "No valid fields provided to update",
-      }),
-  }),
-
-  byId: z.object({
-    params: z.object({ id: objectId }),
-  }),
-
-  list: z.object({
-    query: z.object({
-      page: z.coerce.number().int().min(1).default(1),
-      limit: z.coerce.number().int().min(1).max(100).default(10),
-      search: z.string().trim().max(100).optional(),
-      sort: z
-        .enum(["newest", "oldest", "title", "updated"])
-        .default("newest"),
-    }),
-  }),
-};
-
-resumeSchemas.visibility = z.object({
-  params: z.object({ id: objectId }),
-  body: z.object({ isPublic: z.boolean() }),
-});
-
-export const aiSchemas = {
-  summaries: z.object({
-    body: z.object({
-      jobTitle: z.string().trim().min(1, "Job title is required").max(200),
-      facts: z.string().trim().min(20).max(10000),
-    }),
-  }),
-
-  experienceBullets: z.object({
-    body: z.object({
-      facts: z.string().trim().min(20).max(10000),
-      positionTitle: z
-        .string()
-        .trim()
-        .min(1, "Position title is required")
-        .max(200),
-    }),
-  }),
-};
-
-const profileSkillItem = skillItem.extend({
-  category: z.string().max(100).optional(),
-});
-
 const projectItem = z.object({
   name: z.string().max(200).optional(),
   role: z.string().max(200).optional(),
@@ -220,9 +126,116 @@ const languageItem = z.object({
   proficiency: z.string().max(50).optional(),
 });
 
+export const supportingSchemas = { projects: projectItem, certifications: certificationItem, achievements: achievementItem, awards: awardItem, publications: publicationItem, volunteer: volunteerItem, languages: languageItem };
+
+// Every writable resume field is listed explicitly. Anything absent here —
+// notably `userEmail` and `_id` — is stripped by zod before it reaches the
+// document, which is what stops a client reassigning a resume to another user.
+export const resumeWritableFields = z.object({
+  title: z.string().trim().min(1).max(100),
+  firstName: z.string().max(100),
+  lastName: z.string().max(100),
+  jobTitle: z.string().max(200),
+  address: z.string().max(300),
+  phone: z.string().max(50),
+  email: z.string().max(200),
+  themeColor: z.string().max(50),
+  summary: z.string().max(20000),
+  experience: z.array(experienceItem).max(50),
+  education: z.array(educationItem).max(50),
+  skills: z.array(skillItem).max(100),
+  template: z.enum(["legacy", "ats-minimal", "professional", "modern", "executive", "technical", "academic"]),
+  paperSize: z.enum(["A4", "Letter"]),
+  typography: z.enum(["sans", "serif", "mono"]),
+  fontSize: z.number().min(9).max(14),
+  spacing: z.number().min(1).max(1.8),
+  targetRole: z.string().max(200),
+  targetIndustry: z.string().max(200),
+  targetJob: objectId.nullable(),
+  status: z.enum(["draft", "ready", "archived"]),
+  sections: z.array(z.object({
+    id: z.string().min(1).max(100),
+    type: z.enum(["summary", "experience", "education", "skills", "projects", "certifications", "awards", "publications", "volunteer", "languages", "interests", "leadership", "coursework", "research", "achievements"]),
+    title: z.string().trim().min(1).max(100),
+    hidden: z.boolean().default(false),
+    content: z.string().max(20000).optional(),
+    entries: z.array(z.unknown()).max(50).optional(),
+  }).transform((section, ctx) => {
+    if (!section.entries) return section;
+    const schema = supportingSchemas[section.type];
+    if (!schema) { ctx.addIssue({ code: "custom", message: "This section does not support structured entries", path: ["entries"] }); return z.NEVER; }
+    const parsed = z.array(schema).max(section.type === "languages" ? 30 : 50).safeParse(section.entries);
+    if (!parsed.success) { for (const issue of parsed.error.issues) ctx.addIssue({ ...issue, path: ["entries", ...issue.path] }); return z.NEVER; }
+    const content = parsed.data.map(entry => Object.entries(entry).filter(([, value]) => value !== undefined && value !== "" && (!Array.isArray(value) || value.length)).map(([key, value]) => `${key.replace(/([A-Z])/g, " $1")}: ${Array.isArray(value) ? value.join(", ") : value}`).join("\n")).join("\n\n");
+    if (content.length > 20000) { ctx.addIssue({ code: "custom", message: "Section content exceeds 20,000 characters", path: ["entries"] }); return z.NEVER; }
+    return { ...section, entries: parsed.data, content };
+  })).max(40).refine(items => new Set(items.map(item => item.id)).size === items.length, "Section ids must be unique"),
+});
+
+export const resumeSchemas = {
+  create: z.object({
+    body: z.object({
+      title: z.string().trim().min(1, "Title is required").max(100),
+    }),
+  }),
+
+  update: z.object({
+    params: z.object({ id: objectId }),
+    body: resumeWritableFields
+      .partial()
+      .refine((data) => Object.keys(data).length > 0, {
+        message: "No valid fields provided to update",
+      }),
+  }),
+
+  byId: z.object({
+    params: z.object({ id: objectId }),
+  }),
+
+  list: z.object({
+    query: z.object({
+      page: z.coerce.number().int().min(1).default(1),
+      limit: z.coerce.number().int().min(1).max(100).default(10),
+      search: z.string().trim().max(100).optional(),
+      sort: z
+        .enum(["newest", "oldest", "title", "updated", "status", "score"])
+        .default("newest"),
+    }),
+  }),
+};
+
+resumeSchemas.visibility = z.object({
+  params: z.object({ id: objectId }),
+  body: z.object({ isPublic: z.boolean() }),
+});
+
+export const aiSchemas = {
+  summaries: z.object({
+    body: z.object({
+      jobTitle: z.string().trim().min(1, "Job title is required").max(200),
+      facts: z.string().trim().min(20).max(10000),
+    }),
+  }),
+
+  experienceBullets: z.object({
+    body: z.object({
+      facts: z.string().trim().min(20).max(10000),
+      positionTitle: z
+        .string()
+        .trim()
+        .min(1, "Position title is required")
+        .max(200),
+    }),
+  }),
+};
+
+const profileSkillItem = skillItem.extend({
+  category: z.string().max(100).optional(),
+});
+
 // As with resumes, every writable field is listed. `user` and `userEmail` are
 // absent, so a client cannot reassign a profile to another account.
-const careerProfileWritableFields = z.object({
+export const careerProfileWritableFields = z.object({
   sections: resumeWritableFields.shape.sections,
   firstName: z.string().max(100),
   lastName: z.string().max(100),

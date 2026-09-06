@@ -3,7 +3,7 @@ import QRCode from "qrcode";
 import { env } from "../config/env.js";
 import { Resume } from "../Models/Resume.Model.js";
 import { ApiError } from "../utils/ApiError.js";
-import { buildResumePdf } from "../services/documentService.js";
+import { buildResumePdf, optimizeResumeLayout } from "../services/documentService.js";
 import { z } from "zod";
 import { objectId } from "../validation/schemas.js";
 import * as service from "../services/resumeService.js";
@@ -20,6 +20,7 @@ import {
 import { authMiddleware, optionalAuth } from "../middleware/Auth.js";
 import { validate } from "../middleware/validate.js";
 import { resumeSchemas } from "../validation/schemas.js";
+import { documentLimiter } from "../middleware/rateLimit.js";
 
 const router = express.Router();
 
@@ -90,6 +91,10 @@ router.get("/:id/layout", authMiddleware, validate(resumeSchemas.byId), asyncHan
   const resume = await service.getOwnedResume({ id: req.params.id, userEmail: req.user.email });
   const { pages, warnings } = await buildResumePdf(resume);
   res.json({ success: true, pages, warnings });
+}));
+router.post("/:id/layout/optimize", authMiddleware, documentLimiter, validate(resumeSchemas.byId), asyncHandler(async (req, res) => {
+  const resume = await service.getOwnedResume({ id: req.params.id, userEmail: req.user.email });
+  res.json({ success: true, ...await optimizeResumeLayout(resume) });
 }));
 router.patch("/:id/slug", authMiddleware, validate(z.object({ params: z.object({ id: objectId }), body: z.object({ slug: z.string().trim().toLowerCase().min(3).max(60).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/) }) })), asyncHandler(async (req, res) => {
   const resume = await service.findOwnedResume(req.params.id, req.user.email);

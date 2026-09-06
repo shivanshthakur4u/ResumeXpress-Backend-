@@ -7,6 +7,12 @@ import "../Models/ResumeVersion.Model.js";
 import "../Models/CareerWorkspace.Model.js";
 try {
   await connectDB();
-  for (const model of Object.values(mongoose.models)) await model.createIndexes();
+  for (const model of Object.values(mongoose.models)) {
+    await model.createIndexes();
+    console.log(`${model.modelName}: declared indexes ensured`);
+  }
   console.log("Indexes created. Existing resume content was not rewritten.");
+} catch (error) {
+  console.error("Index migration failed", { name: error.name, code: error.code });
+  process.exitCode = 1;
 } finally { await mongoose.disconnect(); }

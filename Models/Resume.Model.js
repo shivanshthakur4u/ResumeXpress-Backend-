@@ -43,9 +43,11 @@ const ResumeSchema = new mongoose.Schema(
     spacing: { type: Number, default: 1.4 },
     targetRole: String,
     targetIndustry: String,
+    targetJob: { type: String, ref: "Job", default: null },
     status: { type: String, default: "draft" },
     sections: { type: [new mongoose.Schema({
       id: String, type: String, title: String, hidden: Boolean, content: String,
+      entries: { type: [mongoose.Schema.Types.Mixed], default: undefined },
     }, { _id: false })], default: undefined },
     experience: [ExperienceSchema],
     education: [EducationSchema],
@@ -70,5 +72,6 @@ const ResumeSchema = new mongoose.Schema(
 // Serves the dashboard list query (owner's resumes, newest first). createdAt
 // only exists now that timestamps are enabled, so this sort previously no-opped.
 ResumeSchema.index({ userEmail: 1, createdAt: -1 });
+ResumeSchema.index({ userEmail: 1, updatedAt: -1 });
 
 export const Resume = mongoose.model("Resume", ResumeSchema);

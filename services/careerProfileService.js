@@ -2,6 +2,7 @@ import { CareerProfile } from "../Models/CareerProfile.Model.js";
 import { User } from "../Models/User.Model.js";
 import { ApiError } from "../utils/ApiError.js";
 import { findOwnedResume, saveResumeContent } from "./resumeService.js";
+import { supportingSchemas, careerProfileWritableFields } from "../validation/schemas.js";
 
 const stripInternal = (doc) => {
   const obj = doc.toObject ? doc.toObject() : { ...doc };
@@ -206,7 +207,7 @@ export const importProfileIntoResume = async ({
     const content = items.map(item => typeof item === "string" ? item : Object.entries(item.toObject ? item.toObject() : item).filter(([key, value]) => key !== "_id" && value !== undefined && value !== "" && (!Array.isArray(value) || value.length)).map(([key, value]) => `${key.replace(/([A-Z])/g, " $1")}: ${Array.isArray(value) ? value.join(", ") : value}`).join("\n")).join("\n\n");
     if (savedSections.length || content) {
       layout = layout.filter(section => section.type !== type);
-      layout.push(...(savedSections.length ? savedSections.map(section => section.toObject()) : [{ id: `profile-${type}`, type, title: type[0].toUpperCase() + type.slice(1), hidden: false, content }]));
+      layout.push(...(supportingSchemas[type] && items.length ? [{ id: `profile-${type}`, type, title: type[0].toUpperCase() + type.slice(1), hidden: false, entries: items.map(item => supportingSchemas[type].parse(item.toObject ? item.toObject() : item)) }] : savedSections.length ? savedSections.map(section => section.toObject()) : [{ id: `profile-${type}`, type, title: type[0].toUpperCase() + type.slice(1), hidden: false, content }]));
       applied.push(type); added = true;
     }
   }
@@ -256,6 +257,13 @@ export const syncProfileFromResume = async ({ resumeId, userEmail }) => {
   }
 
   if (resume.sections?.length) { profile.sections = resume.sections.map(section => section.toObject()); updated.push("sections"); }
+  for (const type of Object.keys(supportingSchemas)) {
+    const entries = (resume.sections ?? []).filter(section => section.type === type).flatMap(section => section.entries ?? []);
+    if (entries.length) {
+      profile[type] = careerProfileWritableFields.shape[type].parse(entries);
+      updated.push(type);
+    }
+  }
   await profile.save();
 
   return {

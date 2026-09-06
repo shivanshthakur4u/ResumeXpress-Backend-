@@ -111,3 +111,48 @@ test("public slugs, QR codes and visibility remain under owner control", async (
   assert.equal((await request.get("/api/v1/resume/public/test-candidate")).status, 200);
   const qr = await api("get", `resume/${resumeId}/qr`); assert.equal(qr.status, 200); assert.match(qr.headers["content-type"], /image\/png/);
 });
+
+test("dashboard and coach use owned current suggestions and approved history", async () => {
+  const { AIAnalysis, CoachMessage } = await import("../Models/CareerWorkspace.Model.js");
+  const { coachContext } = await import("../services/careerWorkspaceService.js");
+  const before = "Built reliable services";
+  const after = "Developed reliable services";
+  await api("put", `resume/updateResume/${resumeId}`, { firstName: "Taylor", email: "taylor@example.com", jobTitle: "Engineer", summary: before, sections: [{ id: "summary", type: "summary", title: "Summary" }] });
+  const review = await AIAnalysis.create({ userEmail: "workspace@example.com", resume: resumeId, kind: "ats", output: { overallScore: 70, recommendations: ["Review skills"] } });
+  const proposal = await AIAnalysis.create({ userEmail: "workspace@example.com", resume: resumeId, kind: "summary", output: { suggestions: [{ field: "summary", current: before, suggested: after, reason: "Clear action", confidence: .9, evidence: [before] }] } });
+  await CoachMessage.create({ userEmail: "other@example.com", resume: resumeId, role: "user", content: "PRIVATE OTHER USER" });
+  const overview = await api("get", "career/overview");
+  assert.equal(overview.status, 200);
+  assert.equal(overview.body.resumeHealth.find(item => item.id === resumeId).completeness, 100);
+  assert.ok(overview.body.recommendations.some(item => item.analysisId === String(proposal._id)));
+  const outsider = await api("get", "career/overview", undefined, stranger);
+  assert.ok(!outsider.body.resumeHealth.some(item => item.id === resumeId));
+  assert.equal((await api("post", `career/analyses/${proposal._id}/apply`, { index: 0, confirmed: true })).status, 200);
+  const context = await coachContext("workspace@example.com", { resumeId });
+  assert.equal(String(context.data.atsReview._id), String(review._id));
+  assert.equal(context.data.atsReview.stale, true);
+  assert.ok(context.data.approvedChanges.some(change => change.before === before && change.after === after));
+  assert.ok(!JSON.stringify(context.data).includes("PRIVATE OTHER USER"));
+  await assert.rejects(coachContext("other@example.com", { resumeId }), /not found/i);
+  const updated = await api("get", "career/overview");
+  assert.ok(!updated.body.recommendations.some(item => item.analysisId === String(proposal._id)));
+  const filtered = await api("get", "career/analyses?kind=summary");
+  assert.ok(filtered.body.items.every(item => item.kind === "summary"));
+});
+
+test("layout proposals preserve content and cover-letter PDFs require ownership", async () => {
+  const { CoverLetter } = await import("../Models/CareerWorkspace.Model.js");
+  const before = (await api("get", `resume/getResumeById/${resumeId}`)).body.resume;
+  assert.equal((await api("post", `resume/${resumeId}/layout/optimize`, {}, stranger)).status, 404);
+  const proposal = await api("post", `resume/${resumeId}/layout/optimize`, {});
+  assert.equal(proposal.status, 200);
+  assert.ok(proposal.body.pages <= proposal.body.beforePages);
+  assert.equal((await api("get", `resume/getResumeById/${resumeId}`)).body.resume.summary, before.summary);
+  const letter = await CoverLetter.create({ userEmail: "workspace@example.com", title: "Application", content: "Dear Hiring Team,\n\nI build reliable services.\n\nTaylor" });
+  assert.equal((await api("get", `career/cover-letters/${letter._id}/pdf`, undefined, stranger)).status, 404);
+  for (const paperSize of ["A4", "Letter"]) {
+    const response = await api("get", `career/cover-letters/${letter._id}/pdf?paperSize=${paperSize}`);
+    assert.equal(response.status, 200); assert.match(response.headers["content-type"], /application\/pdf/);
+    assert.equal(response.body.subarray(0, 5).toString(), "%PDF-");
+  }
+});

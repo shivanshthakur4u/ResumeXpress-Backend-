@@ -41,3 +41,9 @@ export const aiLimiter = build({
   limit: 30,
   message: "AI request limit reached. Please try again later.",
 });
+
+export const documentLimiter = build({
+  windowMs: 60 * 1000,
+  limit: 10,
+  message: "Too many document requests. Please try again in a minute.",
+});

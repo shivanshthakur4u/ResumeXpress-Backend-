@@ -37,3 +37,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+
+# Local database credentials
+atlas-credentials.env
