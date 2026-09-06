@@ -34,18 +34,31 @@ const envSchema = z.object({
 const environment = { ...process.env };
 for (const key of ["EMAIL_USER", "EMAIL_APP_PASSWORD", "GOOGLE_AI_API_KEY", "CORS_ORIGINS"]) if (!environment[key]?.trim()) delete environment[key];
 const parsed = envSchema.safeParse(environment);
+export const configIssues = parsed.success
+  ? []
+  : parsed.error.issues.map(issue => ({ field: issue.path.join(".") || "(root)", message: issue.message }));
 
-if (!parsed.success) {
-  const issues = parsed.error.issues
-    .map((i) => `  - ${i.path.join(".") || "(root)"}: ${i.message}`)
-    .join("\n");
-  console.error(
-    `\nInvalid environment configuration:\n${issues}\n\nSee .env.example for the required values.\n`
-  );
-  process.exit(1);
-}
+// Keep the server alive when deployment configuration is incomplete so the
+// liveness endpoint can report the exact missing fields instead of Vercel's
+// opaque FUNCTION_INVOCATION_FAILED page. Database and auth routes still fail
+// closed until the required values are supplied.
+const raw = parsed.success ? parsed.data : {
+  NODE_ENV: environment.NODE_ENV ?? "production",
+  PORT: Number(environment.PORT ?? 5000),
+  DB_URI: environment.DB_URI ?? "",
+  JWT_SECRET: environment.JWT_SECRET ?? "",
+  JWT_EXPIRES_IN: environment.JWT_EXPIRES_IN ?? "48h",
+  FRONTEND_URL: environment.FRONTEND_URL ?? "http://localhost:3000",
+  CORS_ORIGINS: environment.CORS_ORIGINS,
+  EMAIL_USER: environment.EMAIL_USER,
+  EMAIL_APP_PASSWORD: environment.EMAIL_APP_PASSWORD,
+  SMTP_HOST: environment.SMTP_HOST ?? "smtp.gmail.com",
+  SMTP_PORT: Number(environment.SMTP_PORT ?? 587),
+  GOOGLE_AI_API_KEY: environment.GOOGLE_AI_API_KEY,
+  AI_MODEL: environment.AI_MODEL ?? "gemini-3.6-flash",
+};
 
-const raw = parsed.data;
+if (configIssues.length) console.error("Invalid environment configuration", configIssues);
 
 export const env = {
   ...raw,

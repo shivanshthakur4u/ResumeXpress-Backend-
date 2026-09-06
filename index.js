@@ -3,7 +3,7 @@ import cors from "cors";
 import helmet from "helmet";
 import mongoSanitize from "express-mongo-sanitize";
 
-import { env } from "./config/env.js";
+import { configIssues, env } from "./config/env.js";
 import { connectDB } from "./config/db.js";
 import { generalLimiter } from "./middleware/rateLimit.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
@@ -53,7 +53,7 @@ if (process.env.DEBUG_RESUMEXPRESS === "1") app.use((req, res, next) => {
 // Deliberately mounted before the database gate: a liveness probe that fails
 // when Mongo is down cannot tell you the process is up.
 app.get("/health", (req, res) => {
-  res.status(200).json({ status: "ok", uptime: process.uptime() });
+  res.status(configIssues.length ? 503 : 200).json({ status: configIssues.length ? "misconfigured" : "ok", uptime: process.uptime(), ...(configIssues.length ? { configuration: configIssues } : {}) });
 });
 
 app.get("/", (req, res) => {
