@@ -26,20 +26,36 @@ const SkillSchema = new mongoose.Schema({
   rating: Number,
 });
 
-const ResumeSchema = new mongoose.Schema({
-  firstName: { type: String, default: "" },
-  lastName: { type: String, default: "" },
-  jobTitle: { type: String, default: "" },
-  address: { type: String, default: "" },
-  phone: { type: String, default: "" },
-  email: { type: String, default: "" },
-  themeColor: { type: String, default: "" },
-  summary: { type: String, default: "" },
-  experience: [ExperienceSchema],
-  education: [EducationSchema],
-  skills: [SkillSchema],
-  userEmail: { type: String, required: true },
-  title: { type: String, required: true },
-});
+const ResumeSchema = new mongoose.Schema(
+  {
+    firstName: { type: String, default: "" },
+    lastName: { type: String, default: "" },
+    jobTitle: { type: String, default: "" },
+    address: { type: String, default: "" },
+    phone: { type: String, default: "" },
+    email: { type: String, default: "" },
+    themeColor: { type: String, default: "" },
+    summary: { type: String, default: "" },
+    experience: [ExperienceSchema],
+    education: [EducationSchema],
+    skills: [SkillSchema],
+
+    // Ownership. userEmail stays the authoritative key because existing
+    // documents are keyed on it; user is populated going forward.
+    userEmail: { type: String, required: true, index: true },
+    user: { type: mongoose.Schema.Types.ObjectId, ref: "User", index: true },
+
+    title: { type: String, required: true },
+
+    // Sharing is opt-in. Without this a resume id was enough for anyone to
+    // read the owner's phone, address and work history.
+    isPublic: { type: Boolean, default: false, index: true },
+  },
+  { timestamps: true }
+);
+
+// Serves the dashboard list query (owner's resumes, newest first). createdAt
+// only exists now that timestamps are enabled, so this sort previously no-opped.
+ResumeSchema.index({ userEmail: 1, createdAt: -1 });
 
 export const Resume = mongoose.model("Resume", ResumeSchema);

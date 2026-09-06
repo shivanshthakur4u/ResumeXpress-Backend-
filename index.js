@@ -1,36 +1,91 @@
 import express from "express";
-import mongoose from "mongoose";
-import dotenv from "dotenv";
 import cors from "cors";
+import helmet from "helmet";
+import mongoSanitize from "express-mongo-sanitize";
+
+import { env } from "./config/env.js";
+import { connectDB } from "./config/db.js";
+import { generalLimiter } from "./middleware/rateLimit.js";
+import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
+import { ApiError } from "./utils/ApiError.js";
+
 import userRoutes from "./routes/userRoutes.js";
 import resumeRoutes from "./routes/resumeRoutes.js";
-dotenv.config();
+import aiRoutes from "./routes/aiRoutes.js";
 
 const app = express();
-app.use(cors());
-app.use(express.json());
 
-const uri = process.env.DB_URI;
+// Rate limiting keys on client IP, which behind Vercel's proxy is only correct
+// once the forwarded header is trusted.
+app.set("trust proxy", 1);
 
-// DB Connection
-main().catch((err) => console.log(err));
+app.use(helmet());
 
-async function main() {
+app.use(
+  cors({
+    origin(origin, callback) {
+      // Same-origin and non-browser clients (curl, health checks) send no Origin.
+      if (!origin) return callback(null, true);
+      if (env.corsOrigins.includes(origin)) return callback(null, true);
+      callback(ApiError.forbidden(`Origin ${origin} is not allowed`));
+    },
+    credentials: true,
+  })
+);
+
+// Bounded so a large body cannot be used to exhaust memory.
+app.use(express.json({ limit: "1mb" }));
+
+// Strips $-prefixed and dotted keys, which would otherwise let a crafted body
+// smuggle query operators into a Mongo filter.
+app.use(mongoSanitize());
+
+app.use(generalLimiter);
+
+// Deliberately mounted before the database gate: a liveness probe that fails
+// when Mongo is down cannot tell you the process is up.
+app.get("/health", (req, res) => {
+  res.status(200).json({ status: "ok", uptime: process.uptime() });
+});
+
+app.get("/", (req, res) => {
+  res.status(200).json({ name: "ResumeXpress API", version: "v1" });
+});
+
+// Connections are established lazily and cached, so warm serverless
+// invocations reuse the existing pool. Scoped to /api so only routes that
+// actually touch the database depend on it.
+app.use("/api", async (req, res, next) => {
   try {
-    await mongoose.connect(uri);
-    console.log("Connected to MongoDB");
+    await connectDB();
+    next();
   } catch (err) {
-    console.error("Failed to connect to MongoDB", err);
+    console.error("Database connection failed:", err);
+    next(ApiError.serviceUnavailable("Database is unavailable"));
   }
+});
+
+const mountRoutes = (prefix) => {
+  app.use(`${prefix}/user`, userRoutes);
+  app.use(`${prefix}/resume`, resumeRoutes);
+  app.use(`${prefix}/ai`, aiRoutes);
+};
+
+// Versioned path for new clients; the unversioned path is kept so the existing
+// frontend keeps working unchanged.
+mountRoutes("/api/v1");
+mountRoutes("/api");
+
+app.use(notFoundHandler);
+app.use(errorHandler);
+
+// Vercel invokes the exported handler directly; listening is only for local
+// and self-hosted runs. The previous app.listen() passed no port at all, so
+// the server never bound one locally.
+if (!process.env.VERCEL && env.NODE_ENV !== "test") {
+  app.listen(env.PORT, () => {
+    console.log(`ResumeXpress API listening on http://localhost:${env.PORT}`);
+  });
 }
 
-// routes
-app.use("/api/user", userRoutes);
-app.use("/api/resume", resumeRoutes);
-app.get("/", (req, res) => {
-  res.send("Hello World");
-});
-
-app.listen(() => {
-  console.log(`Server is started`);
-});
+export default app;
