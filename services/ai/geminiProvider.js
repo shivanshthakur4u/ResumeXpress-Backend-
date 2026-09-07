@@ -7,6 +7,7 @@ const client = env.aiEnabled
   : null;
 
 const REQUEST_TIMEOUT_MS = 9_000;
+const MODEL_TIMEOUT_MS = 4_000;
 
 const withTimeout = async (promise, ms) => {
   let timer;
@@ -32,17 +33,20 @@ const request = async ({ prompt, systemInstruction, json }) => {
   let lastError;
   for (const model of models) {
     try {
-      return await client.models.generateContent({
-        model,
-        contents: prompt,
-        config: {
-          systemInstruction,
-          temperature: 0.2,
-          topP: 0.95,
-          maxOutputTokens: 4096,
-          ...(json ? { responseMimeType: "application/json" } : {}),
-        },
-      });
+      return await Promise.race([
+        client.models.generateContent({
+          model,
+          contents: prompt,
+          config: {
+            systemInstruction,
+            temperature: 0.2,
+            topP: 0.95,
+            maxOutputTokens: 4096,
+            ...(json ? { responseMimeType: "application/json" } : {}),
+          },
+        }),
+        new Promise((_, reject) => setTimeout(() => { const error = new Error("Gemini model request timed out"); error.status = 503; reject(error); }, MODEL_TIMEOUT_MS)),
+      ]);
     } catch (error) {
       lastError = error;
       if (![404, 503].includes(error.status) || model === models.at(-1)) throw error;
