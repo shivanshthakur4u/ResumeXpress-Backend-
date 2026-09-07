@@ -6,7 +6,7 @@ const client = env.aiEnabled
   ? new GoogleGenAI({ apiKey: env.GOOGLE_AI_API_KEY })
   : null;
 
-const REQUEST_TIMEOUT_MS = 30_000;
+const REQUEST_TIMEOUT_MS = 9_000;
 
 const withTimeout = async (promise, ms) => {
   let timer;
@@ -21,30 +21,43 @@ const withTimeout = async (promise, ms) => {
   finally { clearTimeout(timer); }
 };
 
-const request = ({ prompt, systemInstruction }) => {
+const request = async ({ prompt, systemInstruction, json }) => {
   if (!client) {
     throw ApiError.serviceUnavailable(
       "AI features are not configured on this server"
     );
   }
-  return client.interactions.create({
-    model: env.AI_MODEL,
-    input: prompt,
-    ...(systemInstruction ? { system_instruction: systemInstruction } : {}),
-    generation_config: {
-      temperature: 0.2,
-      top_p: 0.95,
-      max_output_tokens: 4096,
-    },
-  });
+  const models = [...new Set([env.AI_MODEL, "gemini-3.6-flash"])]
+    .filter(Boolean);
+  let lastError;
+  for (const model of models) {
+    try {
+      return await client.models.generateContent({
+        model,
+        contents: prompt,
+        config: {
+          systemInstruction,
+          temperature: 0.2,
+          topP: 0.95,
+          maxOutputTokens: 4096,
+          ...(json ? { responseMimeType: "application/json" } : {}),
+        },
+      });
+    } catch (error) {
+      lastError = error;
+      if (![404, 503].includes(error.status) || model === models.at(-1)) throw error;
+      console.warn("[DEBUG-RESUMEXPRESS-AI] model fallback", { from: model, to: models[models.indexOf(model) + 1], status: error.status });
+    }
+  }
+  throw lastError;
 };
 
 export const generateText = async ({ prompt, systemInstruction }) => {
   const result = await withTimeout(
-    request({ prompt, systemInstruction }),
+    request({ prompt, systemInstruction, json: false }),
     REQUEST_TIMEOUT_MS
   );
-  return result.output_text ?? "";
+  return result.text ?? "";
 };
 
 const parseJson = raw => {
@@ -72,16 +85,16 @@ export const generateStructured = async ({
     let raw;
     try {
       const result = await withTimeout(
-        request({ prompt, systemInstruction }),
+        request({ prompt, systemInstruction, json: true }),
         REQUEST_TIMEOUT_MS
       );
-      raw = result.output_text ?? "";
-      if (result.usage) onUsage?.({
-        promptTokenCount: result.usage.total_input_tokens,
-        candidatesTokenCount: result.usage.total_output_tokens,
-        totalTokenCount: result.usage.total_tokens,
-        cachedContentTokenCount: result.usage.total_cached_tokens,
-        thoughtsTokenCount: result.usage.total_thought_tokens,
+      raw = result.text ?? "";
+      if (result.usageMetadata) onUsage?.({
+        promptTokenCount: result.usageMetadata.promptTokenCount,
+        candidatesTokenCount: result.usageMetadata.candidatesTokenCount,
+        totalTokenCount: result.usageMetadata.totalTokenCount,
+        cachedContentTokenCount: result.usageMetadata.cachedContentTokenCount,
+        thoughtsTokenCount: result.usageMetadata.thoughtsTokenCount,
       });
     } catch (err) {
       if (err instanceof ApiError) throw err;
