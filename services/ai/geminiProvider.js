@@ -48,6 +48,17 @@ export const generateText = async ({ prompt, systemInstruction }) => {
   return result.response.text();
 };
 
+const parseJson = raw => {
+  const cleaned = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+  try { return JSON.parse(cleaned); } catch {
+    const starts = [cleaned.indexOf("{"), cleaned.indexOf("[")].filter(index => index >= 0);
+    const start = starts.length ? Math.min(...starts) : -1;
+    const end = Math.max(cleaned.lastIndexOf("}"), cleaned.lastIndexOf("]"));
+    if (start < 0 || end <= start) throw new Error("No JSON object or array in model response");
+    return JSON.parse(cleaned.slice(start, end + 1));
+  }
+};
+
 // Model output is parsed and then validated against a zod schema before it is
 // returned, so malformed or unexpected JSON never reaches application logic.
 export const generateStructured = async ({
@@ -76,12 +87,22 @@ export const generateStructured = async ({
     }
 
     try {
-      const cleaned = raw.trim().replace(/^```(?:json)?/i, "").replace(/```$/, "");
-      const parsed = schema.safeParse(JSON.parse(cleaned));
+      const parsed = schema.safeParse(parseJson(raw));
       if (parsed.success) return parsed.data;
       lastError = parsed.error;
+      console.warn("[DEBUG-RESUMEXPRESS-AI] structured validation failed", {
+        attempt: attempt + 1,
+        rawLength: raw.length,
+        issues: parsed.error.issues.slice(0, 8).map(issue => ({ path: issue.path.join("."), code: issue.code })),
+      });
     } catch (err) {
       lastError = err;
+      console.warn("[DEBUG-RESUMEXPRESS-AI] structured parse failed", {
+        attempt: attempt + 1,
+        rawLength: raw?.length ?? 0,
+        name: err?.name,
+        message: err?.message,
+      });
     }
   }
 
