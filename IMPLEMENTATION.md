@@ -171,8 +171,8 @@ It preserves content and template choice, never reduces text below 10 pt unless 
 The proposal endpoint does not save changes.
 The PDF renderer measures entry headings and preserves the Modern column when starting a new page.
 
-`POST /api/v1/career/jobs/import` accepts a PDF or DOCX filename and base64 file content, extracts text without saving a job or calling AI, and returns it for review.
-Imports are authenticated, limited to 512 KB and 30,000 extracted characters, and run in disposable workers with a ten-second timeout and a two-worker limit per API process.
+`POST /api/v1/career/jobs/import` accepts a PDF, DOCX, TXT or Markdown filename and base64 file content, extracts text without saving a job or calling AI, and returns it for review.
+Imports are authenticated, limited to 3 MB and 30,000 extracted characters, and run in disposable workers with a ten-second timeout and a two-worker limit per API process.
 Scanned and encrypted PDFs require pasted text; PDF imports are limited to 20 pages.
 `GET /api/v1/career/cover-letters/:id/pdf?paperSize=A4` downloads the owned saved letter; `Letter` is also supported.
 `POST /api/v1/resume/:id/layout/optimize` returns measured layout settings without changing the resume.

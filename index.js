@@ -36,7 +36,7 @@ app.use(
 );
 
 // Bounded so a large body cannot be used to exhaust memory.
-app.use(express.json({ limit: "1mb" }));
+app.use(express.json({ limit: "5mb" }));
 
 // Strips $-prefixed and dotted keys, which would otherwise let a crafted body
 // smuggle query operators into a Mongo filter.

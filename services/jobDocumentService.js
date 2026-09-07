@@ -2,11 +2,18 @@ import { Worker, isMainThread, parentPort, workerData } from "node:worker_thread
 import { ApiError } from "../utils/ApiError.js";
 
 let active = 0;
+const MAX_DOCUMENT_BYTES = 3 * 1024 * 1024;
 export const extractJobDocument = ({ filename, content }) => {
   const format = filename.toLowerCase().split(".").pop();
   const buffer = Buffer.from(content, "base64");
-  if (!["pdf", "docx"].includes(format) || !buffer.length || buffer.length > 512 * 1024) throw ApiError.badRequest("Choose a PDF or DOCX file smaller than 512 KB.");
+  if (!["pdf", "docx", "txt", "md"].includes(format) || !buffer.length || buffer.length > MAX_DOCUMENT_BYTES) throw ApiError.badRequest("Choose a PDF, DOCX, TXT or Markdown file smaller than 3 MB.");
   if ((format === "pdf" && buffer.subarray(0, 5).toString() !== "%PDF-") || (format === "docx" && buffer.subarray(0, 2).toString() !== "PK")) throw ApiError.badRequest("The file does not match its PDF or DOCX extension.");
+  if (["txt", "md"].includes(format)) {
+    const text = buffer.toString("utf8").replace(/\u0000/g, "").trim();
+    if (text.length < 80) throw ApiError.badRequest("Not enough readable text. Add at least 80 characters.");
+    if (text.length > 30000) throw ApiError.badRequest("The document is too long. Paste the relevant text (up to 30,000 characters).");
+    return Promise.resolve({ text });
+  }
   // ponytail: two parsers per process; use a bounded job queue for larger deployments.
   if (active >= 2) throw ApiError.tooManyRequests("Document imports are busy. Try again shortly.");
   active += 1;

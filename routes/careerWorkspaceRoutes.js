@@ -20,7 +20,7 @@ const body = schema => z.object({ body: schema });
 const respond = fn => asyncHandler(async (req, res) => res.json({ success: true, ...await fn(req) }));
 router.get("/ai/status", respond(() => ({ enabled: isAiAvailable() })));
 router.get("/overview", respond(req => service.overview(req.user.email)));
-router.post(["/jobs/import", "/documents/import"], documentLimiter, validate(body(z.object({ filename: z.string().min(1).max(200), content: z.string().min(4).max(700000).regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/) }))), respond(req => extractJobDocument(req.body)));
+router.post(["/jobs/import", "/documents/import"], documentLimiter, validate(body(z.object({ filename: z.string().min(1).max(200), content: z.string().min(4).max(4200000).regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/) }))), respond(req => extractJobDocument(req.body)));
 router.post("/jobs", validate(body(schemas.jobInput)), respond(async req => ({ job: await service.createJob(req.user.email, req.body) })));
 router.post("/jobs/:id/analyze", aiLimiter, validate(byId), respond(async req => ({ job: await service.analyzeJob(req.user.email, req.params.id) })));
 router.post("/ats", validate(body(schemas.contextInput)), respond(async req => ({ analysis: await service.ats(req.user.email, req.body) })));
