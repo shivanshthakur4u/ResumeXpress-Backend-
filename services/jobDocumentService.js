@@ -40,7 +40,13 @@ if (!isMainThread) {
     if (text.length < 80) parentPort.postMessage({ error: "Not enough readable text. For scanned documents, paste at least 80 characters of text instead." });
     else if (text.length > 30000) parentPort.postMessage({ error: "The document is too long. Paste the relevant text (up to 30,000 characters)." });
     else parentPort.postMessage({ text });
-  } catch {
+  } catch (error) {
+    console.warn("[DEBUG-RESUMEXPRESS-DOCUMENT] parser failure", {
+      format: workerData.format,
+      bytes: workerData.buffer.length,
+      name: error?.name,
+      message: error?.message,
+    });
     parentPort.postMessage({ error: "Could not read this document. Use an unlocked PDF or DOCX, or paste the text." });
   }
 }
