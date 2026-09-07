@@ -1,9 +1,9 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 import { env } from "../../config/env.js";
 import { ApiError } from "../../utils/ApiError.js";
 
 const client = env.aiEnabled
-  ? new GoogleGenerativeAI(env.GOOGLE_AI_API_KEY)
+  ? new GoogleGenAI({ apiKey: env.GOOGLE_AI_API_KEY })
   : null;
 
 const REQUEST_TIMEOUT_MS = 30_000;
@@ -21,31 +21,30 @@ const withTimeout = async (promise, ms) => {
   finally { clearTimeout(timer); }
 };
 
-const getModel = ({ json, systemInstruction }) => {
+const request = ({ prompt, systemInstruction }) => {
   if (!client) {
     throw ApiError.serviceUnavailable(
       "AI features are not configured on this server"
     );
   }
-  return client.getGenerativeModel({
+  return client.interactions.create({
     model: env.AI_MODEL,
-    systemInstruction,
-    generationConfig: {
+    input: prompt,
+    ...(systemInstruction ? { system_instruction: systemInstruction } : {}),
+    generation_config: {
       temperature: 0.2,
-      topP: 0.95,
-      maxOutputTokens: 4096,
-      ...(json ? { responseMimeType: "application/json" } : {}),
+      top_p: 0.95,
+      max_output_tokens: 4096,
     },
   });
 };
 
 export const generateText = async ({ prompt, systemInstruction }) => {
-  const model = getModel({ json: false, systemInstruction });
   const result = await withTimeout(
-    model.generateContent(prompt),
+    request({ prompt, systemInstruction }),
     REQUEST_TIMEOUT_MS
   );
-  return result.response.text();
+  return result.output_text ?? "";
 };
 
 const parseJson = raw => {
@@ -67,19 +66,23 @@ export const generateStructured = async ({
   schema,
   onUsage,
 }) => {
-  const model = getModel({ json: true, systemInstruction });
-
   let lastError;
   // One retry: JSON mode occasionally returns a fenced or truncated object.
   for (let attempt = 0; attempt < 2; attempt += 1) {
     let raw;
     try {
       const result = await withTimeout(
-        model.generateContent(prompt),
+        request({ prompt, systemInstruction }),
         REQUEST_TIMEOUT_MS
       );
-      raw = result.response.text();
-      if (result.response.usageMetadata) onUsage?.(result.response.usageMetadata);
+      raw = result.output_text ?? "";
+      if (result.usage) onUsage?.({
+        promptTokenCount: result.usage.total_input_tokens,
+        candidatesTokenCount: result.usage.total_output_tokens,
+        totalTokenCount: result.usage.total_tokens,
+        cachedContentTokenCount: result.usage.total_cached_tokens,
+        thoughtsTokenCount: result.usage.total_thought_tokens,
+      });
     } catch (err) {
       if (err instanceof ApiError) throw err;
       lastError = err;

@@ -28,7 +28,7 @@ const envSchema = z.object({
   SMTP_PORT: z.coerce.number().int().positive().default(587),
 
   GOOGLE_AI_API_KEY: z.string().optional(),
-  AI_MODEL: z.string().default("gemini-3.6-flash"),
+  AI_MODEL: z.string().default("gemini-3.8-flash"),
 });
 
 const environment = { ...process.env };
@@ -55,7 +55,7 @@ const raw = parsed.success ? parsed.data : {
   SMTP_HOST: environment.SMTP_HOST ?? "smtp.gmail.com",
   SMTP_PORT: Number(environment.SMTP_PORT ?? 587),
   GOOGLE_AI_API_KEY: environment.GOOGLE_AI_API_KEY,
-  AI_MODEL: environment.AI_MODEL ?? "gemini-3.6-flash",
+  AI_MODEL: environment.AI_MODEL ?? "gemini-3.8-flash",
 };
 
 if (configIssues.length) console.error("Invalid environment configuration", configIssues);
