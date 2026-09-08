@@ -12,12 +12,16 @@ const client = env.aiEnabled
 // headers — so the browser reports a CORS failure and the real cause is
 // invisible.
 //
-// Kept deliberately in step with vercel.json's maxDuration (60s), with a wide
-// margin for the database round trips either side. The ceiling is sized for a
-// cold provider connection, measured at ~14s against a warm-path ~2s; it is a
-// safety net, not a target. If you deploy somewhere with a lower function
-// limit, lower this to match or the platform will kill the request first.
-const BUDGET_MS = Number(process.env.AI_BUDGET_MS ?? 25_000);
+// Sized for Vercel's default ~10s function limit, which is what this project
+// currently deploys under. Raising it requires raising the platform's function
+// timeout first — otherwise the platform kills the request and serves its own
+// error page, which carries no CORS headers and surfaces in the browser as a
+// misleading CORS failure rather than the real cause.
+//
+// Note this is below a measured cold-start provider call (~14s against a
+// warm-path ~2s), so a cold request fails cleanly rather than succeeding.
+// That is the deliberate trade until the function limit is raised.
+const BUDGET_MS = Number(process.env.AI_BUDGET_MS ?? 8_000);
 
 const timedOut = () =>
   ApiError.serviceUnavailable(
