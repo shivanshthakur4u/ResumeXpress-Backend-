@@ -4,6 +4,7 @@ import { env } from "../config/env.js";
 import { Resume } from "../Models/Resume.Model.js";
 import { ApiError } from "../utils/ApiError.js";
 import { buildResumePdf, optimizeResumeLayout } from "../services/documentService.js";
+import { analyzeResume } from "../services/authenticityService.js";
 import { z } from "zod";
 import { objectId } from "../validation/schemas.js";
 import * as service from "../services/resumeService.js";
@@ -110,6 +111,12 @@ router.get("/public/:slug", validate(z.object({ params: z.object({ slug: z.strin
 router.post("/public/:slug/view", validate(z.object({ params: z.object({ slug: z.string().max(60).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/) }) })), asyncHandler(async (req, res) => {
   await Resume.updateOne({ publicSlug: req.params.slug, isPublic: true }, { $inc: { publicViews: 1 } });
   res.json({ success: true });
+}));
+// Deterministic, so no AI rate limit applies and it keeps working when the
+// provider is unavailable.
+router.get("/:id/authenticity", authMiddleware, validate(resumeSchemas.byId), asyncHandler(async (req, res) => {
+  const resume = await service.getOwnedResume({ id: req.params.id, userEmail: req.user.email });
+  res.json({ success: true, ...analyzeResume(resume) });
 }));
 router.get("/:id/qr", authMiddleware, validate(resumeSchemas.byId), asyncHandler(async (req, res) => {
   const resume = await service.findOwnedResume(req.params.id, req.user.email);
