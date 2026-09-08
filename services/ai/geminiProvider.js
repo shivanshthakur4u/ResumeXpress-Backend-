@@ -24,6 +24,10 @@ const client = env.aiEnabled
 // That is the deliberate trade until the function limit is raised.
 const BUDGET_MS = Number(process.env.AI_BUDGET_MS ?? 8_000);
 
+// Used when the configured model is missing or overloaded. An alias rather than
+// a pinned version, so it survives model retirements.
+const FALLBACK_MODEL = "gemini-flash-latest";
+
 const timedOut = () =>
   ApiError.serviceUnavailable(
     "The AI provider did not respond in time. Please try again."
@@ -52,12 +56,26 @@ const raceDeadline = (promise, ms) => {
   ]).finally(() => clearTimeout(timer));
 };
 
+// @google/genai ships its own class named ApiError, so a provider failure never
+// satisfies the instanceof below however much its name suggests otherwise. Any
+// provider error left unmapped used to propagate untouched, and the central
+// handler did not recognise it either — turning "the model is busy" into an
+// opaque 500.
 const asApiError = (error) => {
   if (error instanceof ApiError) return error;
-  if (process.env.DEBUG_RESUMEXPRESS === "1") console.info("[DEBUG-RESUMEXPRESS-AI]", { action: "provider-error", status: error.status ?? error.statusCode, name: error.name });
-  if (error.status === 429) return ApiError.tooManyRequests("The AI provider is temporarily rate-limited or its quota is exhausted. Try again later or check the provider quota.");
-  if ([401, 403].includes(error.status)) return ApiError.serviceUnavailable("The AI provider could not authorize this server. Check the server API key and provider permissions.");
-  if (error.status === 404) return ApiError.serviceUnavailable("The configured AI model is unavailable. Update the server AI_MODEL setting.");
+
+  const status = error?.status ?? error?.statusCode;
+  if (process.env.DEBUG_RESUMEXPRESS === "1") console.info("[DEBUG-RESUMEXPRESS-AI]", { action: "provider-error", status, name: error?.name });
+
+  if (status === 429) return ApiError.tooManyRequests("The AI provider is temporarily rate-limited or its quota is exhausted. Try again later or check the provider quota.");
+  if ([401, 403].includes(status)) return ApiError.serviceUnavailable("The AI provider could not authorize this server. Check the server API key and provider permissions.");
+  if (status === 404) return ApiError.serviceUnavailable("The configured AI model is unavailable. Update the server AI_MODEL setting.");
+  if (typeof status === "number" && status >= 500) return ApiError.serviceUnavailable("The AI provider is busy right now. Please try again in a moment.");
+  if (typeof status === "number") return ApiError.serviceUnavailable("The AI provider rejected this request. Please try again.");
+
+  // No HTTP status means this is not a provider failure but a genuine defect in
+  // our own code. Left unwrapped deliberately, so it surfaces as a 500 and gets
+  // noticed rather than being disguised as a provider outage.
   return error;
 };
 
@@ -67,8 +85,11 @@ const request = async ({ prompt, systemInstruction, json, deadline }) => {
       "AI features are not configured on this server"
     );
   }
-  const models = [...new Set([env.AI_MODEL, "gemini-3.6-flash"])]
-    .filter(Boolean);
+  // The fallback is an alias that tracks the current flash model, so it keeps
+  // resolving as versioned names are retired. It was previously the same
+  // literal as the configured model, so the Set deduped it to one entry and
+  // there was no fallback at all — a dead AI_MODEL simply failed outright.
+  const models = [...new Set([env.AI_MODEL, FALLBACK_MODEL])].filter(Boolean);
   let lastError;
   for (const model of models) {
     const remaining = deadline - Date.now();
@@ -90,10 +111,12 @@ const request = async ({ prompt, systemInstruction, json, deadline }) => {
       );
     } catch (error) {
       lastError = asApiError(error);
-      // Only a genuinely missing model is worth trying the fallback for. A
-      // timeout previously fell through to here too, which meant a slow model
-      // burned the budget twice over for the same outcome.
-      if (error.status !== 404 || model === models.at(-1)) throw lastError;
+      // Worth trying the next model when this one is missing (404) or the
+      // provider says it is overloaded (503) — a different model has separate
+      // capacity. Our own timeout carries no `status`, so it correctly does not
+      // trigger a fallback: a slow model would just burn the budget twice.
+      const worthFallback = error?.status === 404 || error?.status === 503;
+      if (!worthFallback || model === models.at(-1)) throw lastError;
       console.warn("[DEBUG-RESUMEXPRESS-AI] model fallback", { from: model, to: models[models.indexOf(model) + 1], status: error.status });
     }
   }

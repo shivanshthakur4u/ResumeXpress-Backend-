@@ -28,7 +28,10 @@ const envSchema = z.object({
   SMTP_PORT: z.coerce.number().int().positive().default(587),
 
   GOOGLE_AI_API_KEY: z.string().optional(),
-  AI_MODEL: z.string().default("gemini-3.8-flash"),
+  // An alias, so the default keeps resolving as versioned models are retired.
+  // A pinned name that no longer serves returns 503 from the provider, which
+  // presents as the AI being entirely broken.
+  AI_MODEL: z.string().default("gemini-flash-latest"),
 });
 
 const environment = { ...process.env };

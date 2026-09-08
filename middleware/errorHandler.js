@@ -61,7 +61,16 @@ export const errorHandler = (err, req, res, next) => {
   if (isUnexpected || apiError.statusCode >= 500) {
     console.error(
       `[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`,
-      { name: err?.name, status: apiError.statusCode }
+      {
+        name: err?.name,
+        status: apiError.statusCode,
+        // Without these an unrecognised error logged as just a name and a 500,
+        // which is indistinguishable from any other failure. providerStatus
+        // catches third-party errors that carry their own status field.
+        message: err?.message,
+        providerStatus: err?.status ?? err?.statusCode,
+        unexpected: isUnexpected,
+      }
     );
   }
 
