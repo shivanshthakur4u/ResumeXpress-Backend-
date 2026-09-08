@@ -1,5 +1,6 @@
 import { Worker, isMainThread, parentPort, workerData } from "node:worker_threads";
 import { ApiError } from "../utils/ApiError.js";
+import { remainingBudget } from "../utils/requestContext.js";
 
 let active = 0;
 const MAX_DOCUMENT_BYTES = 3 * 1024 * 1024;
@@ -20,7 +21,9 @@ export const extractJobDocument = ({ filename, content }) => {
   let worker, timer;
   return new Promise((resolve, reject) => {
     worker = new Worker(new URL(import.meta.url), { workerData: { format, buffer }, resourceLimits: { maxOldGenerationSizeMb: 192 }, execArgv: [] });
-    timer = setTimeout(() => reject(ApiError.badRequest("This document took too long to read. Paste its text instead.")), 10000);
+    // Was a flat 10s, which equals the platform's whole function limit — so the
+    // platform always killed the request first and this message never showed.
+    timer = setTimeout(() => reject(ApiError.badRequest("This document took too long to read. Paste its text instead.")), remainingBudget(10000));
     worker.once("message", result => result.error ? reject(ApiError.badRequest(result.error)) : resolve(result));
     worker.once("error", () => reject(ApiError.badRequest("Could not read the document. Try a smaller file or paste its text.")));
     worker.once("exit", code => { if (code !== 0) reject(ApiError.badRequest("Document import stopped. Paste its text instead.")); });

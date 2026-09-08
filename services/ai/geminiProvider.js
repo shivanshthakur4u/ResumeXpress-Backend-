@@ -1,6 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { env } from "../../config/env.js";
 import { ApiError } from "../../utils/ApiError.js";
+import { remainingBudget } from "../../utils/requestContext.js";
 
 const client = env.aiEnabled
   ? new GoogleGenAI({ apiKey: env.GOOGLE_AI_API_KEY })
@@ -27,6 +28,19 @@ const timedOut = () =>
   ApiError.serviceUnavailable(
     "The AI provider did not respond in time. Please try again."
   );
+
+// The AI gets whatever is left of the request's budget, not a fixed slice. The
+// cold start, database connection and context queries run first, and a fixed
+// budget on top of those still overran the platform's function limit.
+const aiDeadline = () => {
+  const budget = remainingBudget(BUDGET_MS);
+  if (budget < 1_000) {
+    throw ApiError.serviceUnavailable(
+      "This request ran out of time before reaching the AI. Please try again."
+    );
+  }
+  return Date.now() + budget;
+};
 
 const raceDeadline = (promise, ms) => {
   let timer;
@@ -91,7 +105,7 @@ export const generateText = async ({ prompt, systemInstruction }) => {
     prompt,
     systemInstruction,
     json: false,
-    deadline: Date.now() + BUDGET_MS,
+    deadline: aiDeadline(),
   });
   return result.text ?? "";
 };
@@ -117,7 +131,7 @@ export const generateStructured = async ({
 }) => {
   // One deadline for the whole operation, so a retry can never push the
   // function past the platform's timeout.
-  const deadline = Date.now() + BUDGET_MS;
+  const deadline = aiDeadline();
   let lastError;
   // One retry: JSON mode occasionally returns a fenced or truncated object.
   for (let attempt = 0; attempt < 2; attempt += 1) {

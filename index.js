@@ -8,6 +8,7 @@ import { connectDB } from "./config/db.js";
 import { generalLimiter } from "./middleware/rateLimit.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 import { ApiError } from "./utils/ApiError.js";
+import { withRequestDeadline } from "./utils/requestContext.js";
 
 import careerWorkspaceRoutes from "./routes/careerWorkspaceRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
@@ -59,6 +60,10 @@ app.get("/health", (req, res) => {
 app.get("/", (req, res) => {
   res.status(200).json({ name: "ResumeXpress API", version: "v1" });
 });
+
+// Starts the clock before any database or AI work, so slow operations can see
+// how much of the platform's function limit is actually left.
+app.use("/api", withRequestDeadline);
 
 // Connections are established lazily and cached, so warm serverless
 // invocations reuse the existing pool. Scoped to /api so only routes that
