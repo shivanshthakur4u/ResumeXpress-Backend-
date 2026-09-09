@@ -34,6 +34,9 @@ export const analyzeScan = async ({ id, userEmail }) => {
     contactProportion: zoneWords ? Number((contactWords / zoneWords).toFixed(2)) : 0,
     verdict,
     missing,
+    pageBlocks: pageOne,
+    pageHeight: rendered.pageHeight,
+    pageWidth: rendered.pageWidth,
     pages: rendered.pages,
   };
 };
