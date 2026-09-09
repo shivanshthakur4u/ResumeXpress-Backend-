@@ -12,6 +12,8 @@ import { Resume } from "../Models/Resume.Model.js";
 import { ResumeVersion } from "../Models/ResumeVersion.Model.js";
 import { documentSections } from "./documentService.js";
 import { createEvidenceRows } from "./evidenceService.js";
+import { analyzeMachineView } from "./machineViewService.js";
+import { analyzeLiability } from "./liabilityService.js";
 export const own = async (model, id, userEmail) => {
   const doc = await model.findOne({ _id: id, userEmail });
   if (!doc) throw ApiError.notFound("Resource not found");
@@ -193,12 +195,66 @@ export const answerInterview = async (userEmail, id, answer) => {
   if (session.answers.length === session.questions.length) session.status = "complete";
   await session.save(); return publicFields(session);
 };
+const ensureCurrentResumeVersion = async (resume, userEmail) => {
+  const revision = resume.__v ?? 0;
+  let version = await ResumeVersion.findOne({ resume: resume._id, revision });
+  if (version) return version;
+  try {
+    version = await ResumeVersion.create({ resume: resume._id, userEmail, revision, source: "manual", snapshot: schemas.resumeDraftFields.parse(resume.toObject()) });
+  } catch (error) {
+    if (error?.code !== 11000) throw error;
+    version = await ResumeVersion.findOne({ resume: resume._id, revision });
+  }
+  return version;
+};
+
+const featureSnapshot = async (resume, userEmail) => {
+  const bullets = (resume.experience ?? []).flatMap(entry => plainText(entry.workSummary ?? "").split(/(?<=[.!?])\s+|\n/).filter(Boolean));
+  const measured = bullets.filter(bullet => /\d/.test(bullet)).length;
+  const [machine, liability] = await Promise.allSettled([
+    analyzeMachineView({ id: resume._id, userEmail }),
+    analyzeLiability({ id: resume._id, userEmail }),
+  ]);
+  return {
+    bulletCount: bullets.length,
+    metricDensity: bullets.length ? Number((measured / bullets.length).toFixed(2)) : 0,
+    specificityScore: analyzeResume(resume).score,
+    recoveryRate: machine.status === "fulfilled" ? machine.value.recoveryRate : null,
+    exposure: liability.status === "fulfilled" ? liability.value.overallExposure : null,
+    capturedAt: new Date().toISOString(),
+  };
+};
+
 export const saveApplication = async (userEmail, data, id) => {
-  if (data.resume) await findOwnedResume(data.resume, userEmail);
   if (data.coverLetter) await own(CoverLetter, data.coverLetter, userEmail);
   const application = id ? await own(Application, id, userEmail) : new Application({ userEmail });
-  if (application.status !== data.status) application.timeline.push({ status: data.status });
-  Object.assign(application, data); await application.save(); return publicFields(application);
+  const previousStatus = application.status;
+  const resumeId = data.resume ?? application.resume;
+  const resume = resumeId ? await findOwnedResume(resumeId, userEmail) : null;
+  if (previousStatus !== data.status) application.timeline.push({ status: data.status });
+  const enteringApplied = data.status === "Applied" && previousStatus !== "Applied";
+  Object.assign(application, data);
+  if (resume && (enteringApplied || (data.status === "Applied" && !application.resumeVersion))) {
+    const version = await ensureCurrentResumeVersion(resume, userEmail);
+    application.resumeVersion = version?._id;
+    application.resumeVersionFeatures = await featureSnapshot(resume, userEmail);
+  }
+  await application.save();
+  if (previousStatus !== data.status) await recordEvent(userEmail, "application_status_changed", application._id);
+  return publicFields(application);
+};
+
+export const outcomeInsights = async userEmail => {
+  const repliedStatuses = ["Screening", "Interview", "Technical Interview", "Final Interview", "Offer", "Rejected"];
+  const [applications, replies] = await Promise.all([
+    Application.countDocuments({ userEmail }),
+    Application.countDocuments({ userEmail, status: { $in: repliedStatuses } }),
+  ]);
+  const requiredApplications = 10;
+  const unlocked = applications >= requiredApplications && replies >= 1;
+  return unlocked
+    ? { unlocked: true, applications, replies, message: "Outcome observations are ready. They describe association in your sample, not causation." }
+    : { unlocked: false, applications, replies, requiredApplications, requiredReplies: 1, message: `Log ${Math.max(0, requiredApplications - applications)} more application${requiredApplications - applications === 1 ? "" : "s"}${replies ? "" : " and at least one reply"} to unlock outcome observations.` };
 };
 export const list = async (model, userEmail, { page = 1, search = "", status, kind, sort = "newest" }) => {
   const filter = { userEmail };

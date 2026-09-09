@@ -40,6 +40,7 @@ router.post("/interviews", aiLimiter, validate(body(schemas.contextInput)), resp
 router.post("/interviews/:id/answer", aiLimiter, validate(z.object({ params: z.object({ id: objectId }), body: z.object({ answer: z.string().trim().min(1).max(10000) }) })), respond(async req => ({ session: await service.answerInterview(req.user.email, req.params.id, req.body.answer) })));
 router.post("/applications", validate(body(schemas.applicationInput)), respond(async req => ({ application: await service.saveApplication(req.user.email, req.body) })));
 router.put("/applications/:id", validate(z.object({ params: z.object({ id: objectId }), body: schemas.applicationInput })), respond(async req => ({ application: await service.saveApplication(req.user.email, req.body, req.params.id) })));
+router.get("/applications/insights", respond(req => service.outcomeInsights(req.user.email)));
 for (const [path, model] of [["jobs", Job], ["applications", Application], ["cover-letters", CoverLetter], ["interviews", InterviewSession], ["analyses", AIAnalysis]]) {
   router.get(`/${path}`, validate(schemas.listInput), respond(req => service.list(model, req.user.email, req.validatedQuery)));
   router.get(`/${path}/:id`, validate(byId), respond(async req => ({ item: service.publicFields(await service.own(model, req.params.id, req.user.email)) })));
