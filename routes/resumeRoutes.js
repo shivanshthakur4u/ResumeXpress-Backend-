@@ -6,6 +6,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { buildResumePdf, optimizeResumeLayout } from "../services/documentService.js";
 import { analyzeResume } from "../services/authenticityService.js";
 import { analyzeMachineView } from "../services/machineViewService.js";
+import { analyzeLiability } from "../services/liabilityService.js";
 import { z } from "zod";
 import { objectId } from "../validation/schemas.js";
 import * as service from "../services/resumeService.js";
@@ -122,6 +123,9 @@ router.get("/:id/authenticity", authMiddleware, validate(resumeSchemas.byId), as
 router.get("/:id/machine-view", authMiddleware, documentLimiter, validate(resumeSchemas.byId), asyncHandler(async (req, res) => {
   const resume = await service.findOwnedResume(req.params.id, req.user.email);
   res.json({ success: true, ...await analyzeMachineView(resume) });
+}));
+router.get("/:id/liability", authMiddleware, documentLimiter, validate(resumeSchemas.byId), asyncHandler(async (req, res) => {
+  res.json({ success: true, ...await analyzeLiability({ id: req.params.id, userEmail: req.user.email }) });
 }));
 router.get("/:id/qr", authMiddleware, validate(resumeSchemas.byId), asyncHandler(async (req, res) => {
   const resume = await service.findOwnedResume(req.params.id, req.user.email);
