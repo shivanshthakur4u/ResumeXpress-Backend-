@@ -13,6 +13,8 @@ const DEFAULT_SECTIONS = [
 
 const clean = (value) => plainText(String(value ?? "").replace(/<\/(?:li|p)>/gi, "\n").replace(/<li[^>]*>/gi, "• ")).replace(/\s+/g, " ").trim();
 const tokens = (value) => clean(value).toLowerCase().match(/[a-z0-9]+/g) ?? [];
+// ponytail: token heuristics keep this deterministic and bounded; use PDF
+// coordinates if a future template needs layout-aware recovery.
 const hasSequence = (haystack, needle) => needle.length > 0 && haystack.some((_, index) => needle.every((token, offset) => haystack[index + offset] === token));
 
 const lineIndex = (lines, value) => {
