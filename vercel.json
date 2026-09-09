@@ -5,7 +5,10 @@
             "src": "index.js",
             "use": "@vercel/node",
             "config": {
-                "includeFiles": ["node_modules/@napi-rs/**"]
+                "includeFiles": [
+                    "node_modules/@napi-rs/**",
+                    "node_modules/pdfjs-dist/**"
+                ]
             }
         }
     ],

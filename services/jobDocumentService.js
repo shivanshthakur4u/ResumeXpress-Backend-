@@ -1,3 +1,4 @@
+import { createRequire } from "node:module";
 import { ApiError } from "../utils/ApiError.js";
 import { remainingBudget } from "../utils/requestContext.js";
 
@@ -36,10 +37,34 @@ const ensurePdfGlobals = () =>
     }
   })());
 
+// pdf.js resolves its worker from a path relative to its own module location.
+// That guess is wrong once the function is bundled for deployment, producing
+// "Setting up fake worker failed: Cannot find module .../pdf.worker.mjs".
+// Resolving it ourselves and setting it explicitly removes the guess; the
+// vercel.json includeFiles entry ensures the file is actually shipped.
+let workerReady;
+const ensurePdfWorker = (PDFParse) =>
+  (workerReady ??= (() => {
+    try {
+      const require = createRequire(import.meta.url);
+      const workerSrc = require.resolve("pdfjs-dist/legacy/build/pdf.worker.mjs");
+      PDFParse.setWorker(workerSrc);
+      return workerSrc;
+    } catch (error) {
+      // Left to pdf.js's own default rather than thrown: if its guess happens
+      // to be right the parse still succeeds, and this names the cause if not.
+      console.warn("[DEBUG-RESUMEXPRESS-DOCUMENT] pdf worker not resolvable", {
+        message: error?.message,
+      });
+      return null;
+    }
+  })());
+
 const parsers = {
   async pdf(buffer) {
     await ensurePdfGlobals();
     const { PDFParse } = await import("pdf-parse");
+    ensurePdfWorker(PDFParse);
     const parser = new PDFParse({ data: buffer, isEvalSupported: false });
     try {
       const info = await parser.getInfo();
