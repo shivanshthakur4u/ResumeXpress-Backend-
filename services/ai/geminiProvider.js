@@ -209,9 +209,18 @@ export const generateStructured = async ({
     if (deadline - Date.now() <= 250) break;
   }
 
-  console.error("AI structured output failed validation", { name: lastError?.name });
+  console.error("AI structured output failed validation", { name: lastError?.name, message: lastError?.message?.slice(0, 400) });
+
+  // Field paths and zod codes only — no model output, no user content. Without
+  // them "unexpected response" is indistinguishable between a truncated reply,
+  // a wrong shape and a single missing field.
+  const issues = lastError?.issues
+    ?.slice(0, 3)
+    .map((issue) => `${issue.path.join(".") || "root"}: ${issue.code}`)
+    .join("; ");
+
   throw ApiError.serviceUnavailable(
-    "The AI returned an unexpected response. Please try again."
+    `The AI returned an unexpected response. Please try again.${issues ? ` (${issues})` : ""}`
   );
 };
 

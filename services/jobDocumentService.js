@@ -12,8 +12,33 @@ const MAX_TEXT = 30000;
 // new URL(import.meta.url), which is fragile once the function is bundled for
 // deployment — and its failures collapsed into one generic message. The page
 // and byte caps below bound the work instead.
+// pdf.js expects browser globals such as DOMMatrix. @napi-rs/canvas ships Node
+// implementations, but pdf.js reaches for them through a conditional require
+// that deployment bundlers do not trace — so the polyfill was present locally
+// and missing once deployed, surfacing as "DOMMatrix is not defined" on any
+// document whose content needed a transform. Importing it here with a literal
+// specifier makes the dependency explicit and traceable.
+let globalsReady;
+const ensurePdfGlobals = () =>
+  (globalsReady ??= (async () => {
+    if (globalThis.DOMMatrix) return;
+    try {
+      const canvas = await import("@napi-rs/canvas");
+      for (const name of ["DOMMatrix", "DOMPoint", "DOMRect", "ImageData", "Path2D"]) {
+        if (!globalThis[name] && canvas[name]) globalThis[name] = canvas[name];
+      }
+    } catch (error) {
+      // Plain text PDFs still parse without these, so this is not fatal — but
+      // it is logged, because it is the cause if a richer document then fails.
+      console.warn("[DEBUG-RESUMEXPRESS-DOCUMENT] canvas globals unavailable", {
+        message: error?.message,
+      });
+    }
+  })());
+
 const parsers = {
   async pdf(buffer) {
+    await ensurePdfGlobals();
     const { PDFParse } = await import("pdf-parse");
     const parser = new PDFParse({ data: buffer, isEvalSupported: false });
     try {
