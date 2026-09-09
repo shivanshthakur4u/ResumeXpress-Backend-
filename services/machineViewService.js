@@ -61,6 +61,7 @@ const visibleSection = (resume, section) => {
 };
 
 const addEntryFields = (fields, prefix, entry) => {
+  entry = entry ?? {};
   const values = [
     ["title", entry.name || entry.title || entry.organization],
     ["role", entry.role],
