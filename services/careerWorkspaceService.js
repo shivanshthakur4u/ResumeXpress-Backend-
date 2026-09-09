@@ -11,6 +11,7 @@ import { env } from "../config/env.js";
 import { Resume } from "../Models/Resume.Model.js";
 import { ResumeVersion } from "../Models/ResumeVersion.Model.js";
 import { documentSections } from "./documentService.js";
+import { createEvidenceRows } from "./evidenceService.js";
 export const own = async (model, id, userEmail) => {
   const doc = await model.findOne({ _id: id, userEmail });
   if (!doc) throw ApiError.notFound("Resource not found");
@@ -143,6 +144,7 @@ export const applySuggestion = async (userEmail, id, index, edited) => {
   const value = plainText(content);
   const data = suggestion.field === "summary" ? { summary: value } : { experience: resume.experience.map((entry, n) => ({ ...entry.toObject(), ...(n === suggestion.index ? { workSummary: value } : {}) })) };
   const updated = await saveResumeContent(resume, data, "ai");
+  await createEvidenceRows({ userId: resume.user, userEmail, resumeId: resume._id, path: suggestion.field === "summary" ? "summary" : `experience.${suggestion.index}.workSummary`, text: value, quotes: suggestion.evidence });
   await recordEvent(userEmail, "optimization_applied", resume._id);
   return updated;
 };
@@ -159,6 +161,11 @@ export const applyResumeDraft = async (userEmail, id, fields, edited = {}) => {
     if (JSON.stringify(current[field]) !== JSON.stringify(analysis.output.baseline[field])) throw ApiError.conflict("Your resume changed since this draft. Generate a new draft before applying it.");
   }
   const updated = await saveResumeContent(resume, Object.fromEntries(fields.map(field => [field, changes[field] ?? draft[field]])), "ai");
+  for (const field of fields) {
+    const value = changes[field] ?? draft[field];
+    const quotes = analysis.output.evidence?.[field];
+    if (typeof value === "string" && quotes?.length) await createEvidenceRows({ userId: resume.user, userEmail, resumeId: resume._id, path: field, text: value, quotes });
+  }
   await recordEvent(userEmail, "optimization_applied", resume._id);
   return updated;
 };

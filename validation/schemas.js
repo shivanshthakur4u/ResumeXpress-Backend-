@@ -306,4 +306,14 @@ export const careerProfileSchemas = {
   }),
 };
 
+const evidenceKind = z.enum(["metric", "link", "document", "reference", "note"]);
+const evidenceConfidence = z.enum(["confirmed", "estimated", "recalled"]);
+const evidencePath = z.string().trim().min(1).max(200).regex(/^[A-Za-z0-9_.-]+$/, "Use a valid claim path");
+export const evidenceSchemas = {
+  list: z.object({ query: z.object({ resumeId: objectId.optional() }) }),
+  create: z.object({ body: z.object({ resumeId: objectId.nullable().default(null), path: evidencePath, text: z.string().trim().min(1).max(20000), kind: evidenceKind, value: z.string().trim().min(1).max(10000), source: z.string().trim().max(2000).default(""), confidence: evidenceConfidence }) }),
+  update: z.object({ params: z.object({ id: objectId }), body: z.object({ value: z.string().trim().min(1).max(10000).optional(), source: z.string().trim().max(2000).optional(), confidence: evidenceConfidence.optional() }).refine(data => Object.keys(data).length > 0, "Provide a value, source or confidence to update") }),
+  byId: z.object({ params: z.object({ id: objectId }) }),
+};
+
 export { objectId };
