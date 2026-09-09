@@ -5,6 +5,7 @@ import { Resume } from "../Models/Resume.Model.js";
 import { ApiError } from "../utils/ApiError.js";
 import { buildResumePdf, optimizeResumeLayout } from "../services/documentService.js";
 import { analyzeResume } from "../services/authenticityService.js";
+import { analyzeMachineView } from "../services/machineViewService.js";
 import { z } from "zod";
 import { objectId } from "../validation/schemas.js";
 import * as service from "../services/resumeService.js";
@@ -117,6 +118,10 @@ router.post("/public/:slug/view", validate(z.object({ params: z.object({ slug: z
 router.get("/:id/authenticity", authMiddleware, validate(resumeSchemas.byId), asyncHandler(async (req, res) => {
   const resume = await service.getOwnedResume({ id: req.params.id, userEmail: req.user.email });
   res.json({ success: true, ...analyzeResume(resume) });
+}));
+router.get("/:id/machine-view", authMiddleware, documentLimiter, validate(resumeSchemas.byId), asyncHandler(async (req, res) => {
+  const resume = await service.findOwnedResume(req.params.id, req.user.email);
+  res.json({ success: true, ...await analyzeMachineView(resume) });
 }));
 router.get("/:id/qr", authMiddleware, validate(resumeSchemas.byId), asyncHandler(async (req, res) => {
   const resume = await service.findOwnedResume(req.params.id, req.user.email);

@@ -85,6 +85,10 @@ const parsers = {
   },
 };
 
+// Reused by the credibility check so it parses the exact PDF buffer produced by
+// the renderer, without applying the importer's minimum-text rule.
+export const extractPdfText = (buffer) => parsers.pdf(buffer);
+
 // Strips NUL bytes, which PDF text extraction can emit and Mongo rejects.
 const clean = (text) => String(text ?? "").replace(/\u0000/g, "").trim();
 
