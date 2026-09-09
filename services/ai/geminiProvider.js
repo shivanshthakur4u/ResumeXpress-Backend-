@@ -28,9 +28,12 @@ const client = env.aiEnabled
 // no reason. Set this only to hold the AI to something tighter than the request.
 const BUDGET_MS = Number(process.env.AI_BUDGET_MS ?? REQUEST_BUDGET_MS);
 
-// Used when the configured model is missing or overloaded. An alias rather than
-// a pinned version, so it survives model retirements.
-const FALLBACK_MODEL = "gemini-flash-latest";
+// Tried in order when the configured model is missing (404) or the provider
+// reports it overloaded (503). More than one, because a single fallback
+// disappears whenever it happens to equal AI_MODEL — the Set below dedupes it
+// and the request is left with nothing to fall back to. The alias is kept last
+// so a retirement of the pinned name still leaves something that resolves.
+const FALLBACK_MODELS = ["gemini-3.5-flash", "gemini-flash-latest"];
 
 const timedOut = () =>
   ApiError.serviceUnavailable(
@@ -89,11 +92,7 @@ const request = async ({ prompt, systemInstruction, json, deadline }) => {
       "AI features are not configured on this server"
     );
   }
-  // The fallback is an alias that tracks the current flash model, so it keeps
-  // resolving as versioned names are retired. It was previously the same
-  // literal as the configured model, so the Set deduped it to one entry and
-  // there was no fallback at all — a dead AI_MODEL simply failed outright.
-  const models = [...new Set([env.AI_MODEL, FALLBACK_MODEL])].filter(Boolean);
+  const models = [...new Set([env.AI_MODEL, ...FALLBACK_MODELS])].filter(Boolean);
   let lastError;
   for (const model of models) {
     const remaining = deadline - Date.now();
