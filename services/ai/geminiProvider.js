@@ -1,7 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { env } from "../../config/env.js";
 import { ApiError } from "../../utils/ApiError.js";
-import { remainingBudget } from "../../utils/requestContext.js";
+import { remainingBudget, REQUEST_BUDGET_MS } from "../../utils/requestContext.js";
 
 const client = env.aiEnabled
   ? new GoogleGenAI({ apiKey: env.GOOGLE_AI_API_KEY })
@@ -22,7 +22,11 @@ const client = env.aiEnabled
 // Note this is below a measured cold-start provider call (~14s against a
 // warm-path ~2s), so a cold request fails cleanly rather than succeeding.
 // That is the deliberate trade until the function limit is raised.
-const BUDGET_MS = Number(process.env.AI_BUDGET_MS ?? 8_000);
+// Defaults to the whole request budget, so raising REQUEST_BUDGET_MS alone is
+// enough. Two independent knobs meant a generous AI_BUDGET_MS was silently
+// clamped by a smaller request budget, which looked like the AI timing out for
+// no reason. Set this only to hold the AI to something tighter than the request.
+const BUDGET_MS = Number(process.env.AI_BUDGET_MS ?? REQUEST_BUDGET_MS);
 
 // Used when the configured model is missing or overloaded. An alias rather than
 // a pinned version, so it survives model retirements.
