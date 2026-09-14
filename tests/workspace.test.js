@@ -51,6 +51,17 @@ test("jobs and applications validate ownership and track transitions", async () 
   assert.equal(updated.status, 200); assert.deepEqual(updated.body.application.timeline.map(e => e.status), ["Applied", "Interview"]);
   assert.equal((await api("get", `career/applications/${app.body.application._id}`, undefined, stranger)).status, 404);
 });
+// The outcome loop is only as good as this capture. A missing import once made
+// every "Applied" save fail with a 500, and nothing asserted the capture itself.
+test("applying records the exact resume version and its features", async () => {
+  const app = await api("post", "career/applications", { company: "Outcome Co", position: "Engineer", resume: resumeId, status: "Applied" });
+  assert.equal(app.status, 200, JSON.stringify(app.body));
+  const { Application } = await import("../Models/CareerWorkspace.Model.js");
+  const stored = (await Application.findById(app.body.application._id)).toObject();
+  assert.ok(stored.resumeVersion, "resumeVersion must be captured at the moment of applying");
+  assert.equal(typeof stored.resumeVersionFeatures?.bulletCount, "number");
+  assert.ok("specificityScore" in stored.resumeVersionFeatures);
+});
 test("AI without configuration returns an honest service error", async () => {
   const res = await api("post", "career/generate/summary", { resumeId });
   assert.equal(res.status, 503); assert.match(res.body.message, /not configured/i); assert.equal(res.body.stack, undefined);

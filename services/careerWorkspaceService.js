@@ -14,6 +14,7 @@ import { documentSections } from "./documentService.js";
 import { createEvidenceRows } from "./evidenceService.js";
 import { analyzeMachineView } from "./machineViewService.js";
 import { analyzeLiability } from "./liabilityService.js";
+import { analyzeResume } from "./authenticityService.js";
 export const own = async (model, id, userEmail) => {
   const doc = await model.findOne({ _id: id, userEmail });
   if (!doc) throw ApiError.notFound("Resource not found");
