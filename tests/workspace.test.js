@@ -61,6 +61,11 @@ test("applying records the exact resume version and its features", async () => {
   assert.ok(stored.resumeVersion, "resumeVersion must be captured at the moment of applying");
   assert.equal(typeof stored.resumeVersionFeatures?.bulletCount, "number");
   assert.ok("specificityScore" in stored.resumeVersionFeatures);
+  // The captured rate must describe the real resume. An id wrapper once rendered
+  // an empty document, so every application stored recoveryRate 0.
+  const view = await api("get", `resume/${resumeId}/machine-view`);
+  assert.equal(view.status, 200, JSON.stringify(view.body));
+  assert.equal(stored.resumeVersionFeatures.recoveryRate, view.body.recoveryRate);
 });
 test("AI without configuration returns an honest service error", async () => {
   const res = await api("post", "career/generate/summary", { resumeId });

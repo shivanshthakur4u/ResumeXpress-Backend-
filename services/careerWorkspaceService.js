@@ -213,7 +213,9 @@ const featureSnapshot = async (resume, userEmail) => {
   const bullets = (resume.experience ?? []).flatMap(entry => plainText(entry.workSummary ?? "").split(/(?<=[.!?])\s+|\n/).filter(Boolean));
   const measured = bullets.filter(bullet => /\d/.test(bullet)).length;
   const [machine, liability] = await Promise.allSettled([
-    analyzeMachineView({ id: resume._id, userEmail }),
+    // Takes the resume itself. Passing { id, userEmail } rendered an empty
+    // document and silently recorded recoveryRate 0 on every application.
+    analyzeMachineView(resume.toObject()),
     analyzeLiability({ id: resume._id, userEmail }),
   ]);
   return {
